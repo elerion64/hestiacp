@@ -2121,6 +2121,7 @@ form#vstobjects.suspended {
 
 .ui-dialog .ui-dialog-buttonpane {
   border-color: #404040 !important;
+  background-color: #252525 !important;
 }
 
 .shortcuts {
