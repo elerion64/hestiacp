@@ -2895,7 +2895,7 @@ td.hint {
 }
 .ui-button:hover, .button:hover, .ui-button.cancel:hover, .button.cancel:hover,
 .ui-button.ui-widget.ui-state-default.ui-corner-all.ui-button-text-only.submit:hover,
-.vst-advanced:hover {
+.vst-advanced:hover, .to-top:hover, .to-shortcuts:hover {
   color: #0099ff !important;
   text-shadow: 1px 1px rgba(255,255,255,0.5) !important;
   border: 1px solid #54a6e5 !important;
@@ -2909,7 +2909,7 @@ td.hint {
 .button:active,.button:focus,.ui-button.cancel:focus,.ui-button.cancel:active,
 .button.cancel:active,.button.cancel:focus,
 .ui-button.ui-widget.ui-state-default.ui-corner-all.ui-button-text-only.submit:active,
-.vst-advanced:active,.vst-advanced:focus {
+.vst-advanced:active,.vst-advanced:focus, .to-top:focus, .to-shortcuts:focus {
   border: 1px solid #0066b4 !important;
   background: linear-gradient(to bottom, rgba(210,232,250,1) 0%,rgba(187,220,247,1) 50%,rgba(162,207,244,1) 51%,rgba(194,224,248,1) 100%) !important;
   color: #046c98 !important;
