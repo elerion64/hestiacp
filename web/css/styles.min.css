@@ -2764,6 +2764,10 @@ a.vst-text:active b{
   border: none !important
 }
 
+.vst-advanced:active {
+  font-size: unset;
+}
+
 .login-box .vst-advanced {
   border-bottom: none;
   color: #326b9b;
