@@ -140,10 +140,11 @@ b, strong {
 
 .notification-container {
     box-shadow: none;
-    border: 1px solid #dadada;
+    border: 1px solid #ccc;
+    background: #fff;
 }
 
 .context-menu.sort-order {
     box-shadow: none;
-    border: 1px solid #dadada;
+    border: 1px solid #ccc;
 }
