@@ -31,6 +31,7 @@ b, strong {
 .l-header {
     box-shadow: none;
     background: #5070a6;
+    text-shadow: none !important;
 }
 
 .l-menu__item--active {
