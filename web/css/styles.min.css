@@ -3711,7 +3711,12 @@ form#vstobjects.suspended {
 }
 
 .ui-dialog-buttonpane {
-  border-color: #aaaaaa !important;
+  border-color: #fff!important;
+  box-shadow: inset 0px 0px 2px rgba(0,0,0,0.25);
+  border-bottom: 1px solid #fff !important;
+  background: #e0e0e0;
+  margin-top: 0px !important;
+  padding-top: 0px !important;
 }
 
 .ui-widget {
