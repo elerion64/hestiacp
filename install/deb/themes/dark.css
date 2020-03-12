@@ -1385,7 +1385,7 @@ label:hover {
 
 }
 .vst-input.vst-list-editor:focus {
-  background-color: #505050;
+  background-color: #222222;
   box-shadow: none !important;
 }
 
