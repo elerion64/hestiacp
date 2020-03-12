@@ -3095,8 +3095,9 @@ a.button.cancel {
 ::-moz-focus-inner {border:0;}
 
 .login {
-  background-color: rgba(255,255,255,0.65);
-  box-shadow: 0px 8px 25px rgba(0,0,0, 0.3);
+  background-color: rgba(255,255,255,0.7);
+  box-shadow: 0px 8px 25px rgba(0,0,0, 0.3),
+              inset 0px 0px 2px rgba(255,255,255,1);
   font-family: 'Exo', Tahoma, Arial, Helvetica, sans-serif;
   margin: 0;
   padding: 0;
