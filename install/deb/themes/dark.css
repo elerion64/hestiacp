@@ -1268,12 +1268,12 @@ body.mobile .l-icon-shortcuts {
 
 
 .vst-error {
-  color: #f864fa;
+  color: #ff3333;
 
 }
 
 .vst-ok {
-
+  color: #53ba55;
 }
 
 .l-unit-toolbar__buttonstrip .vst-ok, .l-unit-toolbar__buttonstrip .vst-error {

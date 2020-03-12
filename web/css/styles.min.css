@@ -2424,7 +2424,7 @@ body.mobile .l-icon-shortcuts {
 
 
 .vst-error {
-  color: #BE5ABF;
+  color: #ff3333;
   font-weight: 600;
   overflow: hidden;
   max-width: 500px;
@@ -2433,11 +2433,12 @@ body.mobile .l-icon-shortcuts {
 }
 
 .vst-ok {
-  color: #3b9de8;
+  color: #53ba55;
   overflow: hidden;
   max-width: 500px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.8rem;
 }
 
 .l-unit-toolbar__buttonstrip .vst-ok, .l-unit-toolbar__buttonstrip .vst-error {
