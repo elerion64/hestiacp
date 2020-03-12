@@ -2128,6 +2128,7 @@ form#vstobjects.suspended {
   background: rgba(30,30,30,0.95);
   border: 1px solid rgba(255,255,255,0.25);
   box-shadow: 0px 0px 20px rgba(0,0,0,0.5);
+  border-bottom: none !important;
 }
 
 .shortcuts .header {
