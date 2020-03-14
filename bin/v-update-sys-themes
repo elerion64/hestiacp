@@ -4,8 +4,12 @@
 # info: update system themes
 # options: quiet
 #
-# The function is for updating system theme css files from
-# Hestia Control Panel's GitHub repository
+# The function is for updating the system theme CSS files from
+# Hestia Control Panel's GitHub repository.
+#
+# Primarily used for development purposes when testing new
+# themes prior to release, however this function may be implemented
+# in other ways in the future.
 
 
 #----------------------------------------------------------#
@@ -44,7 +48,7 @@ if [ -z "$answer_set" ]; then
     if [ "$quiet" ]; then 
         answer="y"
     else
-        read -p "Proceed with theme update installation? [Y/n] " answer
+        read -p "Download and install the latest theme files? [Y/n] " answer
     fi
 else
     answer="y"
