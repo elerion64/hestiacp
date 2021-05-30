@@ -1,3 +1,8 @@
+#=======================================================================#
+# Default Web Domain Template                                           #
+# DO NOT MODIFY THIS FILE! CHANGES WILL BE LOST WHEN REBUILDING DOMAINS #
+#=======================================================================#
+
 server {
     listen      %ip%:%web_port%;
     server_name %domain_idn% %alias_idn%;
@@ -23,8 +28,9 @@ server {
     send_timeout            720;
 
     # Allow "Well-Known URIs" as per RFC 5785
-    location ~* ^/.well-known/ {
-        allow all;
+    location ~ /\.(?!well-known\/) { 
+       deny all; 
+       return 404;
     }
 
     location / {
@@ -44,11 +50,6 @@ server {
 
     location /error/ {
         alias   %home%/%user%/web/%domain%/document_errors/;
-    }
-
-    location ~* "/\.(htaccess|htpasswd)$" {
-        deny    all;
-        return  404;
     }
 
     location /vstats/ {

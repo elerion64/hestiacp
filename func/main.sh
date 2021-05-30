@@ -16,8 +16,8 @@ DNSTPL=$HESTIA/data/templates/dns
 RRD=$HESTIA/web/rrd
 SENDMAIL="$HESTIA/web/inc/mail-wrapper.php"
 HESTIA_GIT_REPO="https://raw.githubusercontent.com/hestiacp/hestiacp"
-HESTIA_THEMES="$HESTIA_INSTALL_DIR/themes"
-HESTIA_THEMES_CUSTOM="$HESTIA/data/templates/themes"
+HESTIA_THEMES="$HESTIA/web/css/themes"
+HESTIA_THEMES_CUSTOM="$HESTIA/web/css/themes/custom"
 SCRIPT="$(basename $0)"
 
 # Return codes
@@ -42,6 +42,25 @@ E_DB=17
 E_RRD=18
 E_UPDATE=19
 E_RESTART=20
+
+# Detect operating system
+detect_os() {
+    if [ -e "/etc/os-release" ]; then
+        get_os_type=$(grep "^ID=" /etc/os-release | cut -f 2 -d '=')
+        if [ "$get_os_type" = "ubuntu" ]; then
+            if [ -e '/usr/bin/lsb_release' ]; then
+                OS_VERSION="$(lsb_release -s -r)"
+                OS_TYPE='Ubuntu'            
+            fi
+        elif [ "$get_os_type" = "debian" ]; then
+            OS_TYPE='Debian'
+            OS_VERSION=$(cat /etc/debian_version|grep -o "[0-9]\{1,2\}"|head -n1)
+        fi
+    else
+        OS_TYPE="Unsupported OS"
+        OS_VERSION="Unknown"
+    fi
+}
 
 # Generate time stamp
 new_timestamp() {
@@ -76,21 +95,36 @@ log_event() {
 
 # Log user history
 log_history() {
-    cmd=$1
-    undo=${2-no}
+    message=$1
     log_user=${3-$user}
 
-    if ! $BIN/v-list-user "$log_user" >/dev/null; then
-        return $E_NOTEXIST
+    # Set default event level and category if not specified
+    if [ -z "$event_level" ]; then
+        event_level="Info"
+    fi
+    if [ -z "$event_category" ]; then
+        event_category="System"
     fi
 
-    log=$HESTIA/data/users/$log_user/history.log
-    touch $log
-    if [ '99' -lt "$(wc -l $log |cut -f 1 -d ' ')" ]; then
-        tail -n 49 $log > $log.moved
-        mv -f $log.moved $log
-        chmod 660 $log
+    # Log system events to system log file
+    if [ "$log_user" = "system" ]; then
+        log=$HESTIA/data/users/admin/system.log
+    else 
+        if ! $BIN/v-list-user "$log_user" >/dev/null; then
+            return $E_NOTEXIST
+        fi
+        log=$HESTIA/data/users/$log_user/history.log
     fi
+    touch $log
+
+    # TODO: Improve log pruning and pagination
+    #
+    #if [ '1000' -lt "$(wc -l $log |cut -f 1 -d ' ')" ]; then
+    #    tail -n 499 $log > $log.moved
+    #    mv -f $log.moved $log
+    #    chmod 660 $log
+    #fi
+
     if [ -z "$date" ]; then
         time_n_date=$(date +'%T %F')
         time=$(echo "$time_n_date" |cut -f 1 -d \ )
@@ -98,7 +132,7 @@ log_history() {
     fi
     curr_str=$(grep "ID=" $log | cut -f 2 -d \' | sort -n | tail -n1)
     id="$((curr_str +1))"
-    echo "ID='$id' DATE='$date' TIME='$time' CMD='$cmd' UNDO='$undo'" >> $log
+    echo "ID='$id' DATE='$date' TIME='$time' LEVEL='$event_level' CATEGORY='$event_category' MESSAGE='$message'" >> $log
 }
 
 # Result checker
@@ -145,8 +179,15 @@ is_package_full() {
     esac
     used=$(echo "$used"| cut -f 1 -d \ )
     limit=$(grep "^$1=" $USER_DATA/user.conf |cut -f 2 -d \')
-    if [ "$limit" != 'unlimited' ] && [[ "$used" -ge "$limit" ]]; then
-        check_result $E_LIMIT "$1 limit is reached :: upgrade user package"
+    if [ "$1" = WEB_ALIASES ]; then
+        # Used is always calculated with the new alias added
+        if [ "$limit" != 'unlimited' ] && [[ "$used" -gt "$limit" ]]; then
+            check_result $E_LIMIT "$1 limit is reached :: upgrade user package"
+        fi
+    else
+        if [ "$limit" != 'unlimited' ] && [[ "$used" -ge "$limit" ]]; then
+            check_result $E_LIMIT "$1 limit is reached :: upgrade user package"
+        fi
     fi
 }
 
@@ -165,19 +206,14 @@ get_user_owner() {
 # Random password generator
 generate_password() {
     matrix=$1
-    lenght=$2
+    length=$2
     if [ -z "$matrix" ]; then
-        matrix=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
+        matrix="A-Za-z0-9"
     fi
-    if [ -z "$lenght" ]; then
-        lenght=10
+    if [ -z "$length" ]; then
+        length=16
     fi
-    i=1
-    while [ $i -le $lenght ]; do
-        pass="$pass${matrix:$(($RANDOM%${#matrix})):1}"
-       ((i++))
-    done
-    echo "$pass"
+    head /dev/urandom | tr -dc $matrix | head -c$length
 }
 
 # Package existence check
@@ -225,7 +261,7 @@ is_object_new() {
         object=$(grep "$2='$3'" $USER_DATA/$1.conf)
     fi
     if [ ! -z "$object" ]; then
-        check_result $E_EXISTS "$2=$3 is already exists"
+        check_result $E_EXISTS "$2=$3 already exists"
     fi
 }
 
@@ -332,7 +368,7 @@ is_object_value_empty() {
     parse_object_kv_list "$str"
     eval value=$4
     if [ ! -z "$value" ] && [ "$value" != 'no' ]; then
-        check_result $E_EXISTS "${4//$}=$value is already exists"
+        check_result $E_EXISTS "${4//$}=$value already exists"
     fi
 }
 
@@ -609,7 +645,7 @@ is_user_format_valid() {
 is_domain_format_valid() {
     object_name=${2-domain}
     exclude="[!|@|#|$|^|&|*|(|)|+|=|{|}|:|,|<|>|?|_|/|\|\"|'|;|%|\`| ]"
-    if [[ $1 =~ $exclude ]] || [[ $1 =~ ^[0-9]+$ ]] || [[ $1 =~ "\.\." ]] || [[ $1 =~ "$(printf '\t')" ]]; then
+    if [[ $1 =~ $exclude ]] || [[ $1 =~ ^[0-9]+$ ]] || [[ $1 =~ "\.\." ]] || [[ $1 =~ "$(printf '\t')" ]] ||  [[ "$1" = "www" ]]; then
         check_result $E_INVALID "invalid $object_name format :: $1"
     fi
 }
@@ -662,7 +698,7 @@ is_number_format_valid() {
 
 # Autoreply format validator
 is_autoreply_format_valid() {
-    if [[ "$1" =~ [$|\`] ]] || [ 10240 -le ${#1} ]; then
+    if [ 10240 -le ${#1} ]; then
         check_result $E_INVALID "invalid autoreply format :: $1"
     fi
 }
@@ -711,7 +747,7 @@ is_common_format_valid() {
 # Database format validator
 is_database_format_valid() {
     exclude="[!|@|#|$|^|&|*|(|)|+|=|{|}|:|,|<|>|?|/|\|\"|'|;|%|\`| ]"
-    if [[ "$1" =~ $exclude ]] || [ 65 -le ${#1} ]; then
+    if [[ "$1" =~ $exclude ]] || [ 64 -le ${#1} ]; then
         check_result $E_INVALID "invalid $2 format :: $1"
     fi
 }
@@ -726,8 +762,8 @@ is_date_format_valid() {
 # Database user validator
 is_dbuser_format_valid() {
     exclude="[!|@|#|$|^|&|*|(|)|+|=|{|}|:|,|<|>|?|/|\|\"|'|;|%|\`| ]"
-    if [ 31 -le ${#1} ]; then
-        check_result $E_INVALID "mysql username can be up to 30 characters long"
+    if [ 33 -le ${#1} ]; then
+        check_result $E_INVALID "mysql username can be up to 32 characters long"
     fi
     if [[ "$1" =~ $exclude ]]; then
         check_result $E_INVALID "invalid $2 format :: $1"
@@ -876,6 +912,13 @@ is_object_format_valid() {
     fi
 }
 
+# Role validator 
+is_role_valid (){
+    if ! [[ "$1" =~ ^admin|user$ ]]; then
+        check_result $E_INVALID "invalid $2 format :: $1"
+    fi
+}
+
 # Password validator
 is_password_format_valid() {
     if [ "${#1}" -lt '6' ]; then
@@ -898,6 +941,12 @@ is_service_format_valid() {
     if ! [[ "$1" =~ ^[[:alnum:]][-|\.|_[:alnum:]]{0,64}$ ]]; then
         check_result $E_INVALID "invalid $2 format :: $1"
     fi
+}
+
+is_hash_format_valid() {
+  if ! [[ "$1" =~ ^[-_A-Za-z0-9]{1,32}$ ]]; then
+        check_result $E_INVALID "invalid $2 format :: $1"
+    fi    
 }
 
 # Format validation controller
@@ -929,22 +978,23 @@ is_format_valid() {
                 email_forward)  is_email_format_valid "$arg" ;;
                 exp)            is_date_format_valid "$arg" ;;
                 extentions)     is_common_format_valid "$arg" 'extentions' ;;
-                fname)          is_name_format_valid "$arg" "first name" ;;
                 ftp_password)   is_password_format_valid "$arg" ;;
                 ftp_user)       is_user_format_valid "$arg" "$arg_name" ;;
+                hash)           is_hash_format_valid "$arg" "$arg_name" ;;
                 host)           is_object_format_valid "$arg" "$arg_name" ;;
                 hour)           is_cron_format_valid "$arg" $arg_name ;;
                 id)             is_int_format_valid "$arg" 'id' ;;
+                iface)          is_interface_format_valid "$arg" ;;
                 ip)             is_ip_format_valid "$arg" ;;
                 ip_name)        is_domain_format_valid "$arg" 'IP name';;
                 ip_status)      is_ip_status_format_valid "$arg" ;;
                 job)            is_int_format_valid "$arg" 'job' ;;
                 key)            is_user_format_valid "$arg" "$arg_name" ;;
-                lname)          is_name_format_valid "$arg" "last name" ;;
                 malias)         is_user_format_valid "$arg" "$arg_name" ;;
                 max_db)         is_int_format_valid "$arg" 'max db';;
                 min)            is_cron_format_valid "$arg" $arg_name ;;
                 month)          is_cron_format_valid "$arg" $arg_name ;;
+                name)           is_name_format_valid "$arg" "name" ;;
                 nat_ip)         is_ip_format_valid "$arg" ;;
                 netmask)        is_ip_format_valid "$arg" 'netmask' ;;
                 newid)          is_int_format_valid "$arg" 'id' ;;
@@ -966,6 +1016,7 @@ is_format_valid() {
                 quota)          is_int_format_valid "$arg" 'quota' ;;
                 record)         is_common_format_valid "$arg" 'record';;
                 restart)        is_boolean_format_valid "$arg" 'restart' ;;
+                role)           is_role_valid "$arg" 'role' ;;
                 rtype)          is_dns_type_format_valid "$arg" ;;
                 rule)           is_int_format_valid "$arg" "rule id" ;;
                 service)        is_service_format_valid "$arg" "$arg_name" ;;
@@ -1125,6 +1176,12 @@ multiphp_default_version() {
     echo "$sys_phpversion"
 }
 
+is_hestia_package(){
+    if [ -z "$(echo $1 | grep -w $2)" ]; then
+        check_result $E_INVALID "$2 package is not controlled by hestiacp"
+    fi
+}
+
 # Run arbitrary cli commands with dropped privileges
 # Note: setpriv --init-groups is not available on debian9 (util-linux 2.29.2)
 # Input:
@@ -1136,4 +1193,15 @@ user_exec() {
     user_groups=${user_groups//\ /,}
 
     setpriv --groups "$user_groups" --reuid "$user" --regid "$user" -- $@
+}
+
+# Simple chmod wrapper that skips symlink files after glob expand
+no_symlink_chmod() {
+    local filemode=$1; shift;
+
+    for i in "$@"; do
+        [[ -L ${i} ]] && continue
+
+        chmod "${filemode}" "${i}"
+    done
 }

@@ -30,37 +30,29 @@ if(!in_array($v_domain, $user_domains)) {
     exit;
 }
 
-$v_web_apps = [
-    [ 'name'=>'Wordpress', 'group'=>'cms', 'enabled'=>true, 'version'=>'latest', 'thumbnail'=>'/images/webapps/wp-thumb.png' ],
-    [ 'name'=>'Drupal',    'group'=>'cms', 'enabled'=>false,'version'=>'latest', 'thumbnail'=>'/images/webapps/drupal-thumb.png' ],
-    [ 'name'=>'Joomla',    'group'=>'cms', 'enabled'=>false,'version'=>'latest', 'thumbnail'=>'/images/webapps/joomla-thumb.png' ],
-
-    [ 'name'=>'Opencart',   'group'=>'ecommerce', 'enabled'=>true,  'version'=>'3.0.3.3', 'thumbnail'=>'/images/webapps/opencart-thumb.png' ],
-    [ 'name'=>'Prestashop', 'group'=>'ecommerce', 'enabled'=>true, 'version'=>'1.7.6.5', 'thumbnail'=>'/images/webapps/prestashop-thumb.png' ],
-    [ 'name'=>'Magento',    'group'=>'ecommerce', 'enabled'=>false, 'version'=>'latest', 'thumbnail'=>'/images/webapps/magento-thumb.png' ],
-
-    [ 'name'=>'Laravel', 'group'=>'starter', 'enabled'=>true, 'version'=>'7.x', 'thumbnail'=>'/images/webapps/laravel-thumb.png' ],
-    [ 'name'=>'Symfony', 'group'=>'starter', 'enabled'=>true, 'version'=>'4.3.x', 'thumbnail'=>'/images/webapps/symfony-thumb.png' ],
-];
-
 // Check GET request
 if (!empty($_GET['app'])) {
     $app = basename($_GET['app']);
     
     $hestia = new \Hestia\System\HestiaApp();
-    $app_installer_class = '\Hestia\WebApp\Installers\\' . $app . 'Setup';
+    $app_installer_class = '\Hestia\WebApp\Installers\\'.$app.'\\' . $app . 'Setup';
     if(class_exists($app_installer_class)) {
         try {
             $app_installer = new $app_installer_class($v_domain, $hestia);
-            $installer = new \Hestia\WebApp\AppWizard($app_installer, $v_domain, $hestia);
-            $GLOBALS['WebappInstaller'] = $installer;
+            $info = $app_installer -> info();
+            if ($info['enabled'] != true){
+                $_SESSION['error_msg'] = sprintf(_('%s installer missing'),$app);
+            }else{
+                $installer = new \Hestia\WebApp\AppWizard($app_installer, $v_domain, $hestia);
+                $GLOBALS['WebappInstaller'] = $installer;
+            }
         } catch (Exception $e) {
             $_SESSION['error_msg'] = $e->getMessage();
             header('Location: /add/webapp/?domain=' . $v_domain);
             exit();
         }
     } else {
-        $_SESSION['error_msg'] = "${app} installer missing";
+        $_SESSION['error_msg'] = sprintf(_('%s installer missing'),$app);
     }
 }
 
@@ -80,7 +72,7 @@ if (!empty($_POST['ok']) && !empty($app) ) {
                 if(!empty($result))
                     $_SESSION['error_msg'] = implode(PHP_EOL, $result);
             } else {
-                $_SESSION['ok_msg'] = htmlspecialchars($app) . " App was installed succesfully !";
+                $_SESSION['ok_msg'] = sprintf(_('%s App was installed succesfully!'),htmlspecialchars($app));
                 header('Location: /add/webapp/?domain=' . $v_domain);
                 exit();
             }
@@ -95,6 +87,19 @@ if (!empty($_POST['ok']) && !empty($app) ) {
 if(!empty($installer)) {
     render_page($user, $TAB, 'setup_webapp');
 } else {
+    $appInstallers = glob(__DIR__.'/../../src/app/WebApp/Installers/*/*.php');
+    $v_web_apps = array();
+    foreach($appInstallers as $app){
+        $hestia = new \Hestia\System\HestiaApp();
+        if( preg_match('/Installers\/([a-zA-Z0-0].*)\/([a-zA-Z0-0].*).php/', $app, $matches)){
+            if ($matches[1] != "Resources"){
+                $app_installer_class = '\Hestia\WebApp\Installers\\'.$matches[1].'\\' . $matches[1] . 'Setup';
+                $app_installer = new $app_installer_class($v_domain, $hestia);
+                $v_web_apps[] = $app_installer -> info();
+                
+            }
+        }
+    }
     render_page($user, $TAB, 'list_webapps');
 }
 

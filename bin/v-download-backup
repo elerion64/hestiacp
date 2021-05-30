@@ -1,6 +1,9 @@
 #!/bin/bash
 # info: Download backup
-# options: USER BACKUP 
+# options: USER BACKUP
+# labels: hestia
+#
+# example: v-download-backup admin admin.2020-11-05_05-10-21.tar
 #
 # The function download back-up from remote server
 
@@ -22,117 +25,20 @@ if [ -z "$BACKUP" ]; then
 fi
 
 # Includes
+# shellcheck source=/usr/local/hestia/func/main.sh
 source $HESTIA/func/main.sh
+# shellcheck source=/usr/local/hestia/func/domain.sh
 source $HESTIA/func/domain.sh
+# shellcheck source=/usr/local/hestia/func/ip.sh
 source $HESTIA/func/ip.sh
+# shellcheck source=/usr/local/hestia/func/db.sh
 source $HESTIA/func/db.sh
+# shellcheck source=/usr/local/hestia/func/rebuild.sh
 source $HESTIA/func/rebuild.sh
+# shellcheck source=/usr/local/hestia/func/backup.sh
+source $HESTIA/func/backup.sh
+# shellcheck source=/usr/local/hestia/conf/hestia.conf
 source $HESTIA/conf/hestia.conf
-
-# Defining FTP command function
-ftpc() {
-    /usr/bin/ftp -n $HOST $PORT <<EOF
-    quote USER $USERNAME
-    quote PASS $PASSWORD
-    lcd $BACKUP
-    binary
-    $1
-    $2
-    $3
-    quit
-EOF
-}
-
-# FTP backup download function
-ftp_download() {
-    source $HESTIA/conf/ftp.backup.conf
-    if [ -z "$PORT" ]; then
-        PORT='21'
-    fi
-    if [ -z $BPATH ]; then
-        ftpc "get $1"
-    else
-        ftpc "cd $BPATH" "get $1"
-    fi
-}
-
-# SFTP command function
-sftpc() {
-    expect -f "-" <<EOF "$@"
-        set timeout 60
-        set count 0
-        spawn /usr/bin/sftp -o StrictHostKeyChecking=no \
-            -o Port=$PORT $USERNAME@$HOST
-        expect {
-            "password:" {
-                send "$PASSWORD\r"
-                exp_continue
-            }
-            -re "Couldn't|(.*)disconnect|(.*)stalled|(.*)not found" {
-                set count \$argc
-                set output "Disconnected."
-                set rc $E_FTP
-                exp_continue
-            }
-            -re ".*denied.*(publickey|password)." {
-                set output "Permission denied, wrong publickey or password."
-                set rc $E_CONNECT
-            }
-            -re "\[0-9]*%" {
-                exp_continue
-            }
-            "sftp>" {
-                if {\$count < \$argc} {
-                    set arg [lindex \$argv \$count]
-                    send "\$arg\r"
-                    incr count
-                } else {
-                    send "exit\r"
-                    set output "Disconnected."
-                    if {[info exists rc] != 1} {
-                        set rc $OK
-                    }
-                }
-                exp_continue
-            }
-            timeout {
-                set output "Connection timeout."
-                set rc $E_CONNECT
-            }
-        }
-        if {[info exists output] == 1} {
-            puts "\$output"
-        }
-    exit \$rc
-EOF
-}
-
-# SFTP backup download function
-sftp_download() {
-    source $HESTIA/conf/sftp.backup.conf
-    if [ -z "$PORT" ]; then
-        PORT='22'
-    fi
-    cd $BACKUP
-    if [ -z $BPATH ]; then
-        sftpc "get $1" > /dev/null 2>&1
-    else
-        sftpc "cd $BPATH" "get $1" > /dev/null 2>&1
-    fi
-
-}
-
-# Google backup download function
-google_download() {
-    source $HESTIA/conf/google.backup.conf
-    gsutil="$HESTIA/3rdparty/gsutil/gsutil"
-    export BOTO_CONFIG="$HESTIA/conf/.google.backup.boto"
-    ${gsutil} cp gs://$BUCKET/$BPATH/$1 $BACKUP/ > /dev/null 2>&1
-    if [ "$?" -ne 0 ]; then
-        check_result "$E_CONNECT" "gsutil failed to download $1"
-    fi
-}
-
 
 #----------------------------------------------------------#
 #                    Verifications                         #
@@ -140,6 +46,9 @@ google_download() {
 
 check_args '2' "$#" 'USER BACKUP'
 is_format_valid 'user' 'backup'
+
+# Perform verification if read-only mode is enabled
+check_hestia_demo_mode
 
 #----------------------------------------------------------#
 #                       Action                             #
@@ -169,6 +78,9 @@ if [ ! -e "$BACKUP/$backup" ]; then
         downloaded='yes'
     fi
     if [ -z "$downloaded" ]; then
+        subj="Download of $backup failed for $user"
+        $BIN/v-add-user-notification $user "$subj" "<b>Unable to retrieve backup file from remote server.</b><br><b>Error:</b> $backup file doesn't exist in '${BACKUP}' directory."
+        sed -i "/v-download-backup $user /d" $HESTIA/data/queue/backup.pipe
         check_result $E_NOTEXIST "backup file $backup doesn't exist in '${BACKUP}' folder"
     else
         if [ -e "$BACKUP/$backup" ]; then
@@ -186,17 +98,18 @@ fi
 # Send notification
 if [ -e "$BACKUP/$backup" ]; then
     cd $BACKUP
-    subj="$user → Download of $backup has been completed"
+    subj="Download of $backup completed for $user"
     email=$(get_user_value '$CONTACT')
-    echo "Download of $backup has been completed you are able to download it for 12 hours" |$SENDMAIL -s "$subj" $email $notify
-    $BIN/v-add-user-notification $user "$subj" "Download of $backup has been completed you are able to download it for 12 hours"
-    
+    echo "Backup file $backup was retrieved from the remote server and will be available to download for 12 hours." | $SENDMAIL -s "$subj" $email $notify
+    $BIN/v-add-user-notification $user "$subj" "Backup file <b>$backup</b> was retrieved from the remote server and will be available to download for <b>12 hours</b>."
 fi
 
 # Cleaning restore queue
 sed -i "/v-download-backup $user /d" $HESTIA/data/queue/backup.pipe
 
 # Logging
+$BIN/v-log-action "system" "Info" "Backup" "Backup download requested (User: $user, Archive: $backup)."
+$BIN/v-log-action "$user" "Info" "Backup" "Backup download requested (Archive: $backup)."
 log_event "$OK" "$ARGUMENTS"
 
 exit

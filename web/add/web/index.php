@@ -16,10 +16,10 @@ if (!empty($_POST['ok'])) {
     }
 
     // Check for empty fields
-    if (empty($_POST['v_domain'])) $errors[] = __('domain');
-    if (empty($_POST['v_ip'])) $errors[] = __('ip');
-    if ((!empty($_POST['v_ssl'])) && (empty($_POST['v_ssl_crt']))&& (empty($_POST['v_letsencrypt']))) $errors[] = __('ssl certificate');
-    if ((!empty($_POST['v_ssl'])) && (empty($_POST['v_ssl_key']))&& (empty($_POST['v_letsencrypt']))) $errors[] = __('ssl key');
+    if (empty($_POST['v_domain'])) $errors[] = _('domain');
+    if (empty($_POST['v_ip'])) $errors[] = _('ip');
+    if ((!empty($_POST['v_ssl'])) && (empty($_POST['v_ssl_crt']))&& (empty($_POST['v_letsencrypt']))) $errors[] = _('ssl certificate');
+    if ((!empty($_POST['v_ssl'])) && (empty($_POST['v_ssl_key']))&& (empty($_POST['v_letsencrypt']))) $errors[] = _('ssl key');
     if (!empty($errors[0])) {
         foreach ($errors as $i => $error) {
             if ( $i == 0 ) {
@@ -28,14 +28,14 @@ if (!empty($_POST['ok'])) {
                 $error_msg = $error_msg.", ".$error;
             }
         }
-        $_SESSION['error_msg'] = __('Field "%s" can not be blank.',$error_msg);
+        $_SESSION['error_msg'] = sprintf(_('Field "%s" can not be blank.'),$error_msg);
     }
 
     // Check stats password length
     if ((!empty($v_stats)) && (empty($_SESSION['error_msg']))) {
         if (!empty($_POST['v_stats_user'])) {
             $pw_len = strlen($_POST['v_stats_password']);
-            if ($pw_len < 6 ) $_SESSION['error_msg'] = __('Password is too short.',$error_msg);
+            if ($pw_len < 6 ) $_SESSION['error_msg'] = _('Password is too short.',$error_msg);
         }
     }
 
@@ -94,14 +94,26 @@ if (!empty($_POST['ok'])) {
     $v_stats = escapeshellarg($_POST['v_stats']);
     $v_stats_user = $data[$v_domain]['STATS_USER'];
     $v_stats_password = $data[$v_domain]['STATS_PASSWORD'];
+    $v_custom_doc_domain = $_POST['v-custom-doc-domain'];
+    $v_custom_doc_folder = $_POST['v-custom-doc-folder'];
+    $v_custom_doc_root_prepath = '/home/'.$user.'/web/';
+    
     $v_ftp = $_POST['v_ftp'];
     $v_ftp_user = $_POST['v_ftp_user'];
     $v_ftp_password = $_POST['v_ftp_password'];
     $v_ftp_email = $_POST['v_ftp_email'];
     if (!empty($v_domain)) $v_ftp_user_prepath .= $v_domain;
 
+    exec (HESTIA_CMD."v-list-user ".$user." json", $output, $return_var);
+    $user_config = json_decode(implode('', $output), true);
+    unset($output);
+    
+    $v_template = $user_config[$user]['TEMPLATE'];
+    $v_backend_template = $user_config[$user]['BACKEND_TEMPLATE'];
+    $v_proxy_template = $user_config[$user]['PROXY_TEMPLATE'];
+    
     // Set advanced option checkmark
-    if (!empty($_POST['v_proxy'])) $v_adv = 'yes';
+    if (!empty($_POST['v_proxy'])) $v_adv = 'yes'; $v_proxy = "yes";
     if (!empty($_POST['v_ftp'])) $v_adv = 'yes';
     if ($_POST['v_proxy_ext'] != $v_proxy_ext) $v_adv = 'yes';
     if ((!empty($_POST['v_aliases'])) && ($_POST['v_aliases'] != 'www.'.$_POST['v_domain'])) $v_adv = 'yes';
@@ -109,7 +121,8 @@ if (!empty($_POST['ok'])) {
     if ((!empty($_POST['v_ssl_crt'])) || (!empty($_POST['v_ssl_key']))) $v_adv = 'yes';
     if ((!empty($_POST['v_ssl_ca'])) || ($_POST['v_stats'] != 'none')) $v_adv = 'yes';
     if ((!empty($_POST['v_letsencrypt']))) $v_adv = 'yes';
-
+    if (!empty($_POST['v_custom_doc_root_check'])){$v_adv = 'yes'; $v_custom_doc_root = 1; }
+    
     // Check advanced features
     if (empty($_POST['v_dns'])) $v_dns = 'off';
     if (empty($_POST['v_mail'])) $v_mail = 'off';
@@ -117,7 +130,7 @@ if (!empty($_POST['ok'])) {
 
     // Add web domain
     if (empty($_SESSION['error_msg'])) {
-        exec (HESTIA_CMD."v-add-web-domain ".$user." ".escapeshellarg($v_domain)." ".$v_ip." 'no' ".$aliases." ".$proxy_ext, $output, $return_var);
+        exec (HESTIA_CMD."v-add-web-domain ".$user." ".escapeshellarg($v_domain)." ".$v_ip." 'yes' ".$aliases." ".$proxy_ext, $output, $return_var);
         check_return_code($return_var,$output);
         unset($output);
         $domain_added = empty($_SESSION['error_msg']);
@@ -155,13 +168,54 @@ if (!empty($_POST['ok'])) {
         exec (HESTIA_CMD."v-delete-web-domain-proxy ".$user." ".escapeshellarg($v_domain)." 'no'", $output, $return_var);
         check_return_code($return_var,$output);
         unset($output);
+        $restart_web = 'yes';
     }
+    
+    // Change template
+    if (($v_template != $_POST['v_template']) && (empty($_SESSION['error_msg']))) {
+        exec (HESTIA_CMD."v-change-web-domain-tpl ".$user." ".escapeshellarg($v_domain)." ".escapeshellarg($_POST['v_template'])." 'no'", $output, $return_var);
+        check_return_code($return_var,$output);
+        unset($output);
+        $restart_web = 'yes';
+    }
+    // Change backend template
+    if ((!empty($_SESSION['WEB_BACKEND'])) && ( $v_backend_template != $_POST['v_backend_template']) && (empty($_SESSION['error_msg']))) {
+        $v_backend_template = $_POST['v_backend_template'];
+        exec (HESTIA_CMD."v-change-web-domain-backend-tpl ".$user." ".escapeshellarg($v_domain)." ".escapeshellarg($v_backend_template), $output, $return_var);
+        check_return_code($return_var,$output);
+        unset($output);
+    }
+    // Change proxy template / Update extension list
+    if ((!empty($_SESSION['PROXY_SYSTEM'])) && (!empty($v_proxy)) && (!empty($_POST['v_proxy'])) && (empty($_SESSION['error_msg'])) ) {
+        $ext = preg_replace("/\n/", " ", $_POST['v_proxy_ext']);
+        $ext = preg_replace("/,/", " ", $ext);
+        $ext = preg_replace('/\s+/', ' ',$ext);
+        $ext = trim($ext);
+        $ext = str_replace(' ', ", ", $ext);
+        if (( $v_proxy_template != $_POST['v_proxy_template']) || ($v_proxy_ext != $ext)) {
+            $ext = str_replace(', ', ",", $ext);
+            if (!empty($_POST['v_proxy_template'])) $v_proxy_template = $_POST['v_proxy_template'];
+            exec (HESTIA_CMD."v-change-web-domain-proxy-tpl ".$user." ".escapeshellarg($v_domain)." ".escapeshellarg($v_proxy_template)." ".escapeshellarg($ext)." 'no'", $output, $return_var);
+            check_return_code($return_var,$output);
+            $v_proxy_ext = str_replace(',', ', ', $ext);
+            unset($output);
+            $restart_proxy = 'yes';
+        }
+    }
+    
 
     // Add Lets Encrypt support
      if ((!empty($_POST['v_letsencrypt'])) && (empty($_SESSION['error_msg']))) {
         exec (HESTIA_CMD."v-schedule-letsencrypt-domain ".$user." ".escapeshellarg($v_domain), $output, $return_var);
         check_return_code($return_var,$output);
         unset($output);
+        
+        if(!empty($_POST['v_ssl_forcessl']) && $_POST['v_ssl_forcessl'] = 'yes'){
+            exec (HESTIA_CMD."v-add-web-domain-ssl-preset ".$user." ".escapeshellarg($v_domain)." 'yes'", $output, $return_var); 
+            check_return_code($return_var,$output);
+            unset ($output); 
+        }        
+        
      } else {
         // Add SSL certificates only if Lets Encrypt is off
          if ((!empty($_POST['v_ssl'])) && (empty($_SESSION['error_msg']))) {
@@ -197,6 +251,12 @@ if (!empty($_POST['ok'])) {
              exec (HESTIA_CMD."v-add-web-domain-ssl ".$user." ".escapeshellarg($v_domain)." ".$tmpdir." ".$v_ssl_home." 'no'", $output, $return_var);
              check_return_code($return_var,$output);
              unset($output);
+             
+             if(!empty($_POST['v_ssl_forcessl']) && $_POST['v_ssl_forcessl'] = 'yes'){
+                exec (HESTIA_CMD."v-add-web-domain-ssl-force ".$user." ".escapeshellarg($v_domain), $output, $return_var); 
+                check_return_code($return_var,$output);
+                unset ($output); 
+             }
 
             // Cleanup certificate tempfiles
             if (!empty($_POST['v_ssl_crt'])) unlink($tmpdir."/".$v_domain.".crt");
@@ -227,6 +287,29 @@ if (!empty($_POST['ok'])) {
         unlink($v_stats_password);
         $v_stats_password = escapeshellarg($_POST['v_stats_password']);
     }
+    
+    if ( !empty($_POST['v-custom-doc-domain']) && !empty($_POST['v_custom_doc_root_check']) && $v_custom_doc_root_prepath.$v_custom_doc_domain.'/public_html'.$v_custom_doc_folder != $v_custom_doc_root){
+        if($_POST['v-custom-doc-domain'] == $v_domain && empty($_POST['v-custom-doc-folder'])){
+
+        }else{
+            $v_custom_doc_domain = escapeshellarg($_POST['v-custom-doc-domain']);
+            if(substr($_POST['v-custom-doc-folder'], -1) == '/'){
+                $v_custom_doc_folder = escapeshellarg(substr($_POST['v-custom-doc-folder'],0,-1));
+            }else{
+                $v_custom_doc_folder = escapeshellarg($_POST['v-custom-doc-folder']);  
+            }
+            $v_custom_doc_folder = escapeshellarg($_POST['v-custom-doc-folder']);
+            $v_domain = escapeshellarg(trim($_POST['v_domain']));
+            
+            exec(HESTIA_CMD."v-change-web-domain-docroot ".$user." ".$v_domain." ".$v_custom_doc_domain." ".$v_custom_doc_folder." yes",  $output, $return_var);
+            check_return_code($return_var,$output);
+            unset($output);  
+            $v_custom_doc_root = 1; 
+        }
+    }else{
+        unset($v_custom_doc_root);
+    }   
+    
 
     // Restart DNS server
     if (($_POST['v_dns'] == 'on') && (empty($_SESSION['error_msg']))) {
@@ -254,7 +337,7 @@ if (!empty($_POST['ok'])) {
         $v_ftp_users_updated = array();
         foreach ($_POST['v_ftp_user'] as $i => $v_ftp_user_data) {
             if ($v_ftp_user_data['is_new'] == 1) {
-                if ((!empty($v_ftp_user_data['v_ftp_email'])) && (!filter_var($v_ftp_user_data['v_ftp_email'], FILTER_VALIDATE_EMAIL))) $_SESSION['error_msg'] = __('Please enter valid email address.');
+                if ((!empty($v_ftp_user_data['v_ftp_email'])) && (!filter_var($v_ftp_user_data['v_ftp_email'], FILTER_VALIDATE_EMAIL))) $_SESSION['error_msg'] = _('Please enter valid email address.');
                 if (empty($v_ftp_user_data['v_ftp_user'])) $errors[] = 'ftp user';
                 if (empty($v_ftp_user_data['v_ftp_password'])) $errors[] = 'ftp user password';
                 if (!empty($errors[0])) {
@@ -265,19 +348,19 @@ if (!empty($_POST['ok'])) {
                             $error_msg = $error_msg.", ".$error;
                         }
                     }
-                    $_SESSION['error_msg'] = __('Field "%s" can not be blank.',$error_msg);
+                    $_SESSION['error_msg'] = sprintf(_('Field "%s" can not be blank.'),$error_msg);
                 }
 
                 // Validate email
                 if ((!empty($v_ftp_user_data['v_ftp_email'])) && (!filter_var($v_ftp_user_data['v_ftp_email'], FILTER_VALIDATE_EMAIL))) {
-                    $_SESSION['error_msg'] = __('Please enter valid email address.');
+                    $_SESSION['error_msg'] = _('Please enter valid email address.');
                 }
 
                 // Check ftp password length
                 if ((!empty($v_ftp_user_data['v_ftp']))) {
                     if (!empty($v_ftp_user_data['v_ftp_user'])) {
                         $pw_len = strlen($v_ftp_user_data['v_ftp_password']);
-                        if ($pw_len < 6 ) $_SESSION['error_msg'] = __('Password is too short.',$error_msg);
+                        if ($pw_len < 6 ) $_SESSION['error_msg'] = _('Password is too short.',$error_msg);
                     }
                 }
 
@@ -297,9 +380,9 @@ if (!empty($_POST['ok'])) {
                     unlink($v_ftp_password);
                     if ((!empty($v_ftp_user_data['v_ftp_email'])) && (empty($_SESSION['error_msg']))) {
                         $to = $v_ftp_user_data['v_ftp_email'];
-                        $subject = __("FTP login credentials");
-                        $from = __('MAIL_FROM', $v_domain );
-                        $mailtext = __('FTP_ACCOUNT_READY',$v_domain,$user,$v_ftp_user_data['v_ftp_user'],$v_ftp_user_data['v_ftp_password']);
+                        $subject = _("FTP login credentials");
+                        $from = sprintf(_('MAIL_FROM'), $v_domain );
+                        $mailtext = sprintf(_('FTP_ACCOUNT_READY'),$v_domain,$user,$v_ftp_user_data['v_ftp_user'],$v_ftp_user_data['v_ftp_password']);
                         send_email($to, $subject, $mailtext, $from);
                         unset($v_ftp_email);
                     }
@@ -314,7 +397,7 @@ if (!empty($_POST['ok'])) {
                     $v_ftp_user_data['is_new'] = 1;
                 }
 
-                $v_ftp_username = preg_replace("/^".$user."_/", "", $v_ftp_user_data['v_ftp_user']);
+                $v_ftp_username = $user.'_'.$v_ftp_user_data['v_ftp_user'];
                 $v_ftp_users_updated[] = array(
                     'is_new'            => $v_ftp_user_data['is_new'],
                     'v_ftp_user'        => $return_var == 0 ? $v_ftp_username_full : $v_ftp_username,
@@ -328,7 +411,7 @@ if (!empty($_POST['ok'])) {
         }
 
         if (!empty($_SESSION['error_msg']) && $domain_added) {
-            $_SESSION['ok_msg'] = __('WEB_DOMAIN_CREATED_OK',htmlentities($v_domain),htmlentities($v_domain));
+            $_SESSION['ok_msg'] = sprintf(_('WEB_DOMAIN_CREATED_OK'),htmlentities($v_domain),htmlentities($v_domain));
             $_SESSION['flash_error_msg'] = $_SESSION['error_msg'];
             $url = '/edit/web/?domain='.strtolower(preg_replace("/^www\./i", "", $v_domain));
             header('Location: ' . $url);
@@ -338,7 +421,7 @@ if (!empty($_POST['ok'])) {
 
     // Flush field values on success
     if (empty($_SESSION['error_msg'])) {
-        $_SESSION['ok_msg'] = __('WEB_DOMAIN_CREATED_OK',htmlentities($v_domain),htmlentities($v_domain));
+        $_SESSION['ok_msg'] = sprintf(_('WEB_DOMAIN_CREATED_OK'),htmlentities($v_domain),htmlentities($v_domain));
         unset($v_domain);
         unset($v_aliases);
         unset($v_ssl);
@@ -354,6 +437,39 @@ if (!empty($_POST['ok'])) {
 // Define user variables
 $v_ftp_user_prepath = $panel[$user]['HOME'] . "/web";
 $v_ftp_email = $panel[$user]['CONTACT'];
+$v_custom_doc_root_prepath = '/home/'.$user.'/web/';
+
+if( $_POST['v_ssl_forcessl'] != 'no' ){
+    $v_ssl_forcessl = 'yes';
+}else{
+    $v_ssl_forcessl = 'no';
+}
+// List user package
+exec (HESTIA_CMD."v-list-user ".$user." json", $output, $return_var);
+$user_config = json_decode(implode('', $output), true);
+unset($output);
+// List web templates and set default values
+exec (HESTIA_CMD."v-list-web-templates json", $output, $return_var);
+$templates = json_decode(implode('', $output), true);
+unset($output);
+$v_template = (!empty($_POST['v_template'])) ? $_POST['v_template'] : $user_config[$user]['WEB_TEMPLATE'];
+
+// List backend templates
+if (!empty($_SESSION['WEB_BACKEND'])) {
+    exec (HESTIA_CMD."v-list-web-templates-backend json", $output, $return_var);
+    $backend_templates = json_decode(implode('', $output), true);
+    unset($output);
+    $v_backend_template = (!empty($_POST['v_backend_template'])) ? $_POST['v_backend_template'] : $user_config[$user]['BACKEND_TEMPLATE'];
+}
+
+// List proxy templates
+if (!empty($_SESSION['PROXY_SYSTEM'])) {
+    exec (HESTIA_CMD."v-list-web-templates-proxy json", $output, $return_var);
+    $proxy_templates = json_decode(implode('', $output), true);
+    unset($output);
+    $v_proxy_template = (!empty($_POST['v_proxy_template'])) ? $_POST['v_proxy_template'] : $user_config[$user]['PROXY_TEMPLATE'];
+
+}
 
 // List IP addresses
 exec (HESTIA_CMD."v-list-user-ips ".$user." json", $output, $return_var);
@@ -363,6 +479,12 @@ unset($output);
 // List web stat engines
 exec (HESTIA_CMD."v-list-web-stats json", $output, $return_var);
 $stats = json_decode(implode('', $output), true);
+unset($output);
+
+// Get all user domains 
+exec (HESTIA_CMD."v-list-web-domains ".escapeshellarg($user)." json", $output, $return_var);
+$user_domains = json_decode(implode('', $output), true);
+$user_domains = array_keys($user_domains);
 unset($output);
 
 // Render page

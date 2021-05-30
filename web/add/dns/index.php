@@ -21,8 +21,8 @@ if (!empty($_POST['ok'])) {
     }
 
     // Check empty fields
-    if (empty($_POST['v_domain'])) $errors[] = __('domain');
-    if (empty($_POST['v_ip'])) $errors[] = __('ip');
+    if (empty($_POST['v_domain'])) $errors[] = _('domain');
+    if (empty($_POST['v_ip'])) $errors[] = _('ip');
     if (!empty($errors[0])) {
         foreach ($errors as $i => $error) {
             if ( $i == 0 ) {
@@ -31,7 +31,7 @@ if (!empty($_POST['ok'])) {
                 $error_msg = $error_msg.", ".$error;
             }
         }
-        $_SESSION['error_msg'] = __('Field "%s" can not be blank.',$error_msg);
+        $_SESSION['error_msg'] = sprintf(_('Field "%s" can not be blank.'),$error_msg);
     }
 
     // Protect input
@@ -54,7 +54,14 @@ if (!empty($_POST['ok'])) {
         check_return_code($return_var,$output);
         unset($output);
     }
-
+    
+    // Change domain template
+    if (($v_template != $_POST['v_template']) && (empty($_SESSION['error_msg']))) {
+        $v_template = escapeshellarg($_POST['v_template']);
+        exec (HESTIA_CMD."v-change-dns-domain-tpl ".$user." ".$v_domain." ".$v_template." 'no'", $output, $return_var);
+        check_return_code($return_var,$output);
+        unset($output);
+    }
 
     // Set expiriation date
     if (empty($_SESSION['error_msg'])) {
@@ -85,7 +92,7 @@ if (!empty($_POST['ok'])) {
 
     // Flush field values on success
     if (empty($_SESSION['error_msg'])) {
-        $_SESSION['ok_msg'] = __('DNS_DOMAIN_CREATED_OK',htmlentities($_POST['v_domain']),htmlentities($_POST['v_domain']));
+        $_SESSION['ok_msg'] = sprintf(_('DNS_DOMAIN_CREATED_OK'),htmlentities($_POST['v_domain']),htmlentities($_POST['v_domain']));
         unset($v_domain);
     }
 }
@@ -113,7 +120,7 @@ if (!empty($_POST['ok_rec'])) {
                 $error_msg = $error_msg.", ".$error;
             }
         }
-        $_SESSION['error_msg'] = __('Field "%s" can not be blank.',$error_msg);
+        $_SESSION['error_msg'] = sprintf(_('Field "%s" can not be blank.'),$error_msg);
     }
 
     // Protect input
@@ -123,18 +130,18 @@ if (!empty($_POST['ok_rec'])) {
     $v_val = escapeshellarg($_POST['v_val']);
     $v_priority = escapeshellarg($_POST['v_priority']);
     $v_ttl = escapeshellarg($_POST['v_ttl']);
-
     // Add dns record
     if (empty($_SESSION['error_msg'])) {
         exec (HESTIA_CMD."v-add-dns-record ".$user." ".$v_domain." ".$v_rec." ".$v_type." ".$v_val." ".$v_priority." '' false ".$v_ttl, $output, $return_var);
         check_return_code($return_var,$output);
         unset($output);
-        $v_type = $_POST['v_type'];
+        
     }
-
+    $v_type = $_POST['v_type'];
+    
     // Flush field values on success
     if (empty($_SESSION['error_msg'])) {
-        $_SESSION['ok_msg'] = __('DNS_RECORD_CREATED_OK',htmlentities($_POST['v_rec']),htmlentities($_POST['v_domain']));
+        $_SESSION['ok_msg'] = sprintf(_('DNS_RECORD_CREATED_OK'),htmlentities($_POST['v_rec']),htmlentities($_POST['v_domain']));
         unset($v_domain);
         unset($v_rec);
         unset($v_val);
@@ -156,6 +163,16 @@ if(empty($v_ip) && count($v_ips) > 0) {
     $ip = array_key_first($v_ips);
     $v_ip = (empty($v_ips[$ip]['NAT'])?$ip:$v_ips[$ip]['NAT']);
 }
+
+// List dns templates
+exec (HESTIA_CMD."v-list-dns-templates json", $output, $return_var);
+$templates = json_decode(implode('', $output), true);
+unset($output);
+
+exec (HESTIA_CMD."v-list-user ".$user." json", $output, $return_var);
+$user_config = json_decode(implode('', $output), true);
+unset($output);
+$v_template = $user_config[$user]['DNS_TEMPLATE'];
 
 if (empty($_GET['domain'])) {
     // Display body for dns domain
@@ -179,8 +196,10 @@ if (empty($_GET['domain'])) {
     render_page($user, $TAB, 'add_dns');
 } else {
     // Display body for dns record
-
     $v_domain = $_GET['domain'];
+    if (empty($v_rec)){
+      $v_rec = '@';  
+    }
     render_page($user, $TAB, 'add_dns_rec');
 }
 

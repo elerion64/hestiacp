@@ -1,6 +1,8 @@
 # User account rebuild
 rebuild_user_conf() {
 
+    sanitize_config_file "user"
+
     # Get user variables
     source $USER_DATA/user.conf
 
@@ -13,10 +15,46 @@ rebuild_user_conf() {
     chmod 660 $USER_DATA/history.log
     touch $USER_DATA/stats.log
     chmod 660 $USER_DATA/stats.log
+    
+    # Update FNAME LNAME to NAME
+    if [ -z "$NAME" ]; then 
+        NAME="$FNAME $LNAME"
+        if [ -z $FNAME ]; then NAME=""; fi
+        
+        sed -i "s/FNAME='$FNAME'/NAME='$NAME'/g" $USER_DATA/user.conf
+        sed -i "/LNAME='$LNAME'/d" $USER_DATA/user.conf  
+    fi
+    if [ -z "${TWOFA+x}" ]; then 
+        sed -i "/RKEY/a TWOFA=''" $USER_DATA/user.conf 
+    fi
+    if [ -z "${QRCODE+x}" ]; then
+        sed -i "/TWOFA/a QRCODE=''" $USER_DATA/user.conf 
+    fi
+    if [ -z "${PHPCLI+x}" ]; then 
+        sed -i "/QRCODE/a PHPCLI=''" $USER_DATA/user.conf 
+    fi
+    if [ -z "${ROLE+x}" ]; then 
+        sed -i "/PHPCLI/a ROLE='user'" $USER_DATA/user.conf 
+    fi
+    if [ -z "${THEME+x}" ]; then 
+        sed -i "/LANGUAGE/a THEME=''" $USER_DATA/user.conf 
+    fi
+    if [ -z "${PREF_UI_SORT+x}" ]; then 
+        sed -i "/NOTIFICATIONS/a PREF_UI_SORT='name'" $USER_DATA/user.conf 
+    fi
+    if [ -z "${LOGIN_DISABLED+x}" ]; then 
+        sed -i "/PREF_UI_SORT/a LOGIN_DISABLED=''" $USER_DATA/user.conf 
+    fi
+    if [ -z "${LOGIN_USE_IPLIST+x}" ]; then 
+        sed -i "/LOGIN_DISABLED/a LOGIN_USE_IPLIST=''" $USER_DATA/user.conf 
+    fi
+    if [ -z "${LOGIN_ALLOW_IPS+x}" ]; then 
+        sed -i "/LOGIN_USE_IPLIST/a LOGIN_ALLOW_IPS=''" $USER_DATA/user.conf 
+    fi
 
     # Run template trigger
     if [ -x "$HESTIA/data/packages/$PACKAGE.sh" ]; then
-        $HESTIA/data/packages/$PACKAGE.sh "$user" "$CONTACT" "$FNAME" "$LNAME"
+        $HESTIA/data/packages/$PACKAGE.sh "$user" "$CONTACT" "$NAME"
     fi
 
     # Rebuild user
@@ -58,17 +96,20 @@ rebuild_user_conf() {
         $HOMEDIR/$user/.cache \
         $HOMEDIR/$user/.local \
         $HOMEDIR/$user/.composer \
-        $HOMEDIR/$user/.ssh
-
+        $HOMEDIR/$user/.vscode-server \
+        $HOMEDIR/$user/.ssh \
+        $HOMEDIR/$user/.npm
     chmod a+x $HOMEDIR/$user
     chmod a+x $HOMEDIR/$user/conf
-    chown $user:$user \
+    chown --no-dereference $user:$user \
         $HOMEDIR/$user \
         $HOMEDIR/$user/.config \
         $HOMEDIR/$user/.cache \
         $HOMEDIR/$user/.local \
         $HOMEDIR/$user/.composer \
-        $HOMEDIR/$user/.ssh
+        $HOMEDIR/$user/.vscode-server \
+        $HOMEDIR/$user/.ssh \
+        $HOMEDIR/$user/.npm
     chown root:root $HOMEDIR/$user/conf
 
     $BIN/v-add-user-sftp-jail "$user"
@@ -99,8 +140,8 @@ rebuild_user_conf() {
         chmod 751 $HOMEDIR/$user/conf/web
         chmod 751 $HOMEDIR/$user/web
         chmod 771 $HOMEDIR/$user/tmp
-        chown $user:$user $HOMEDIR/$user/web
-        if [ -z "$create_user" ]; then
+        chown --no-dereference $user:$user $HOMEDIR/$user/web
+        if [ "$create_user" = "yes" ]; then
             $BIN/v-rebuild-web-domains $user $restart
         fi
     fi
@@ -114,7 +155,7 @@ rebuild_user_conf() {
 
         mkdir -p $HOMEDIR/$user/conf/dns
         chmod 751 $HOMEDIR/$user/conf/dns
-        if [ -z "$create_user" ]; then
+        if [ "$create_user" = "yes" ]; then
             $BIN/v-rebuild-dns-domains $user $restart
         fi
     fi
@@ -134,7 +175,7 @@ rebuild_user_conf() {
         mkdir -p $HOMEDIR/$user/mail
         chmod 751 $HOMEDIR/$user/mail
         chmod 751 $HOMEDIR/$user/conf/mail
-        if [ -z "$create_user" ]; then
+        if [ "$create_user" = "yes" ]; then
             $BIN/v-rebuild-mail-domains $user
         fi
     fi
@@ -145,7 +186,7 @@ rebuild_user_conf() {
         chmod 660 $USER_DATA/db.conf
         echo "$BIN/v-update-databases-disk $user" >> $HESTIA/data/queue/disk.pipe
 
-        if [ -z "$create_user" ]; then
+        if [ "$create_user" = "yes" ]; then
             $BIN/v-rebuild-databases $user
         fi
     fi
@@ -154,7 +195,7 @@ rebuild_user_conf() {
         touch $USER_DATA/cron.conf
         chmod 660 $USER_DATA/cron.conf
 
-        if [ -z "$create_user" ]; then
+        if [ "$create_user" = "yes" ]; then
             $BIN/v-rebuild-cron-jobs $user $restart
         fi
     fi
@@ -173,7 +214,8 @@ rebuild_web_domain_conf() {
     if [ ! -d /etc/$PROXY_SYSTEM/conf.d/domains ]; then
         mkdir -p /etc/$PROXY_SYSTEM/conf.d/domains
     fi
-
+    
+    syshealth_repair_web_config
     get_domain_values 'web'
     is_ip_valid $IP
     prepare_web_domain_values
@@ -196,7 +238,6 @@ rebuild_web_domain_conf() {
 
     $BIN/v-add-fs-directory "$user" "$HOMEDIR/$user/web/$domain"
     $BIN/v-add-fs-directory "$user" "$HOMEDIR/$user/web/$domain/public_html"
-    $BIN/v-add-fs-directory "$user" "$HOMEDIR/$user/web/$domain/public_shtml"
     $BIN/v-add-fs-directory "$user" "$HOMEDIR/$user/web/$domain/document_errors"
     $BIN/v-add-fs-directory "$user" "$HOMEDIR/$user/web/$domain/cgi-bin"
     $BIN/v-add-fs-directory "$user" "$HOMEDIR/$user/web/$domain/private"
@@ -224,12 +265,11 @@ rebuild_web_domain_conf() {
     fi
 
     # Set ownership
-    chown $user:$user \
+    chown --no-dereference $user:$user \
         $HOMEDIR/$user/web/$domain \
         $HOMEDIR/$user/web/$domain/private \
         $HOMEDIR/$user/web/$domain/cgi-bin \
-        $HOMEDIR/$user/web/$domain/public_html \
-        $HOMEDIR/$user/web/$domain/public_shtml
+        $HOMEDIR/$user/web/$domain/public_*html 
     chown -R $user:$user $HOMEDIR/$user/web/$domain/document_errors
     chown root:$user /var/log/$WEB_SYSTEM/domains/$domain.*
 
@@ -259,13 +299,17 @@ rebuild_web_domain_conf() {
 
     # Refresh HTTPS redirection if previously enabled
     if [ "$SSL_FORCE" = 'yes' ]; then
-        $BIN/v-delete-web-domain-ssl-force $user $domain no
-        $BIN/v-add-web-domain-ssl-force $user $domain yes
+        $BIN/v-delete-web-domain-ssl-force $user $domain no yes
+        $BIN/v-add-web-domain-ssl-force $user $domain yes yes
     fi
 
     if [ "$SSL_HSTS" = 'yes' ]; then
-        $BIN/v-delete-web-domain-ssl-hsts $user $domain no
-        $BIN/v-add-web-domain-ssl-hsts $user $domain yes
+        $BIN/v-delete-web-domain-ssl-hsts $user $domain no yes
+        $BIN/v-add-web-domain-ssl-hsts $user $domain yes yes
+    fi
+    if [ "$FASTCGI_CACHE" = 'yes' ]; then
+        $BIN/v-delete-fastcgi-cache $user $domain
+        $BIN/v-add-fastcgi-cache $user $domain "$FASTCGI_DURATION"
     fi
 
     # Adding proxy configuration
@@ -384,20 +428,17 @@ rebuild_web_domain_conf() {
     done
 
     # Set folder permissions
-    chmod 551   $HOMEDIR/$user/web/$domain \
+    no_symlink_chmod 551   $HOMEDIR/$user/web/$domain \
                 $HOMEDIR/$user/web/$domain/stats \
                 $HOMEDIR/$user/web/$domain/logs
-    chmod 751   $HOMEDIR/$user/web/$domain/private \
+    no_symlink_chmod 751   $HOMEDIR/$user/web/$domain/private \
                 $HOMEDIR/$user/web/$domain/cgi-bin \
-                $HOMEDIR/$user/web/$domain/public_html \
-                $HOMEDIR/$user/web/$domain/public_shtml \
+                $HOMEDIR/$user/web/$domain/public_*html \
                 $HOMEDIR/$user/web/$domain/document_errors
     chmod 640 /var/log/$WEB_SYSTEM/domains/$domain.*
 
-    chown $user:www-data $HOMEDIR/$user/web/$domain/public_html \
-                $HOMEDIR/$user/web/$domain/public_shtml
+    chown --no-dereference $user:www-data $HOMEDIR/$user/web/$domain/public_*html
 }
-
 # DNS domain rebuild
 rebuild_dns_domain_conf() {
 
@@ -516,21 +557,6 @@ rebuild_mail_domain_conf() {
             echo "$local_ip" > $HOMEDIR/$user/conf/mail/$domain/ip
         fi
 
-        
-        # Setting HELO for mail domain
-        if [ ! -z "$local_ip" ]; then
-            IP_RDNS=$(is_ip_rdns_valid "$local_ip")
-            if [ ! -z "$IP_RDNS" ]; then
-                if [ $(grep -s "^${domain}:" /etc/exim4/mailhelo.conf) ]; then
-                    sed -i "/^${domain}:/c\\${domain}:${IP_RDNS}" /etc/exim4/mailhelo.conf
-                else
-                    echo ${domain}:${IP_RDNS} >> /etc/exim4/mailhelo.conf
-                fi
-            else
-                sed -i "/^${domain}:/d" /etc/exim4/mailhelo.conf
-            fi
-        fi
-
         # Adding antispam protection
         if [ "$ANTISPAM" = 'yes' ]; then
             touch $HOMEDIR/$user/conf/mail/$domain/antispam
@@ -545,6 +571,11 @@ rebuild_mail_domain_conf() {
         if [ "$DKIM" = 'yes' ]; then
             cp $USER_DATA/mail/$domain.pem \
                 $HOMEDIR/$user/conf/mail/$domain/dkim.pem
+        fi
+        
+        # Rebuild SMTP Relay configuration
+        if [ "$U_SMTP_RELAY" = 'true' ]; then
+            $BIN/v-add-mail-domain-smtp-relay $user $domain "$U_SMTP_RELAY_HOST" "$U_SMTP_RELAY_USERNAME" "$U_SMTP_RELAY_PASSWORD" "$U_SMTP_RELAY_PORT"
         fi
 
         # Removing configuration files if domain is suspended
@@ -586,7 +617,7 @@ rebuild_mail_domain_conf() {
             if [ "$QUOTA" = 'unlimited' ]; then
                 QUOTA=0
             fi
-            str="$account:$MD5:$user:mail::$HOMEDIR/$user::userdb_quota_rule=*:storage=${QUOTA}M"
+            str="$account:$MD5:$user:mail::$HOMEDIR/$user:${QUOTA}:userdb_quota_rule=*:storage=${QUOTA}M"
             echo $str >> $HOMEDIR/$user/conf/mail/$domain/passwd
             for malias in ${ALIAS//,/ }; do
                 echo "$malias@$domain_idn:$account@$domain_idn" >> $dom_aliases

@@ -1,19 +1,49 @@
+# Global
+database_set_default_ports() {
+
+    # Set default ports for MySQL and PostgreSQL
+    mysql_default="3306"
+    pgsql_default="5432"
+
+    # Handle missing values for both $PORT and $port
+    # however don't override both at once or custom ports will be overridden.
+
+    if [ -z "$PORT" ]; then 
+        if [ "$type" = 'mysql' ]; then 
+            PORT="$mysql_default"
+        fi
+        if [ "$type" = 'pgsql' ]; then
+            PORT="$pgsql_default"
+        fi
+    fi
+    if [ -z "$port" ]; then 
+        if [ "$type" = 'mysql' ]; then 
+            port="$mysql_default"
+        fi
+        if [ "$type" = 'pgsql' ]; then
+            port="$pgsql_default"
+        fi
+    fi
+}
+
 # MySQL
 mysql_connect() {
+    unset PORT
     host_str=$(grep "HOST='$1'" $HESTIA/conf/mysql.conf)
     parse_object_kv_list "$host_str"
+    if [ -z $PORT ]; then PORT=3306; fi
     if [ -z $HOST ] || [ -z $USER ] || [ -z $PASSWORD ]; then
         echo "Error: mysql config parsing failed"
         log_event "$E_PARSING" "$ARGUMENTS"
         exit $E_PARSING
     fi
-
     mycnf="$HESTIA/conf/.mysql.$HOST"
     if [ ! -e "$mycnf" ]; then
         echo "[client]">$mycnf
         echo "host='$HOST'" >> $mycnf
         echo "user='$USER'" >> $mycnf
         echo "password='$PASSWORD'" >> $mycnf
+        echo "port='$PORT'" >> $mycnf
         chmod 600 $mycnf
     else
         mypw=$(grep password $mycnf|cut -f 2 -d \')
@@ -22,6 +52,7 @@ mysql_connect() {
             echo "host='$HOST'" >> $mycnf
             echo "user='$USER'" >> $mycnf
             echo "password='$PASSWORD'" >> $mycnf
+            echo "port='$PORT'" >> $mycnf
             chmod 660 $mycnf
         fi
     fi
@@ -29,6 +60,8 @@ mysql_connect() {
     mysql --defaults-file=$mycnf -e 'SELECT VERSION()' > $mysql_out 2>&1
     if [ '0' -ne "$?" ]; then
         if [ "$notify" != 'no' ]; then
+            email=$(grep CONTACT $HESTIA/data/users/admin/user.conf |cut -f 2 -d \')
+            subj="MySQL connection error on $(hostname)"
             echo -e "Can't connect to MySQL $HOST\n$(cat $mysql_out)" |\
                 $SENDMAIL -s "$subj" $email
         fi
@@ -59,6 +92,8 @@ mysql_dump() {
     if [ '0' -ne "$?" ]; then
         rm -rf $tmpdir
         if [ "$notify" != 'no' ]; then
+            email=$(grep CONTACT $HESTIA/data/users/admin/user.conf |cut -f 2 -d \')
+           subj="MySQL error on $(hostname)"
             echo -e "Can't dump database $database\n$(cat $err)" |\
                 $SENDMAIL -s "$subj" $email
         fi
@@ -70,18 +105,22 @@ mysql_dump() {
 
 # PostgreSQL
 psql_connect() {
+    unset PORT
     host_str=$(grep "HOST='$1'" $HESTIA/conf/pgsql.conf)
     parse_object_kv_list "$host_str"
     export PGPASSWORD="$PASSWORD"
+    if [ -z $PORT ]; then PORT=5432; fi
     if [ -z $HOST ] || [ -z $USER ] || [ -z $PASSWORD ] || [ -z $TPL ]; then
         echo "Error: postgresql config parsing failed"
         log_event "$E_PARSING" "$ARGUMENTS"
         exit $E_PARSING
     fi
-
-    psql -h $HOST -U $USER -c "SELECT VERSION()" > /dev/null 2>/tmp/e.psql
+    
+    psql -h $HOST -U $USER -p $PORT -c "SELECT VERSION()" > /dev/null 2>/tmp/e.psql
     if [ '0' -ne "$?" ]; then
         if [ "$notify" != 'no' ]; then
+            email=$(grep CONTACT $HESTIA/data/users/admin/user.conf |cut -f 2 -d \')
+            subj="PostgreSQL connection error on $(hostname)"
             echo -e "Can't connect to PostgreSQL $HOST\n$(cat /tmp/e.psql)" |\
                 $SENDMAIL -s "$subj" $email
         fi
@@ -103,6 +142,8 @@ psql_dump() {
     if [ '0' -ne "$?" ]; then
         rm -rf $tmpdir
         if [ "$notify" != 'no' ]; then
+            email=$(grep CONTACT $HESTIA/data/users/admin/user.conf |cut -f 2 -d \')
+            subj="PostgreSQL error on $(hostname)"
             echo -e "Can't dump database $database\n$(cat /tmp/e.psql)" |\
                 $SENDMAIL -s "$subj" $email
         fi
@@ -245,6 +286,24 @@ add_pgsql_database() {
 
     query="SELECT rolpassword FROM pg_authid WHERE rolname='$dbuser';"
     md5=$(psql_query "$query" | grep md5 | cut -f 2 -d \ )
+}
+
+add_mysql_database_temp_user() {
+    mysql_connect $host;
+    query="GRANT ALL ON \`$database\`.* TO \`$dbuser\`@localhost
+    IDENTIFIED BY '$dbpass'"
+    mysql_query "$query" > /dev/null
+  }
+
+delete_mysql_database_temp_user(){
+    echo $database;
+    echo $dbuser;
+    echo $host;
+    mysql_connect $host;
+    query="REVOKE ALL ON \`$database\`.* FROM \`$dbuser\`@localhost"
+    mysql_query "$query" > /dev/null
+    query="DROP USER '$dbuser'@'localhost'"
+    mysql_query "$query" > /dev/null
 }
 
 # Check if database host do not exist in config 

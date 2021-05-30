@@ -7,7 +7,7 @@ $TAB = 'FIREWALL';
 include($_SERVER['DOCUMENT_ROOT']."/inc/main.php");
 
 // Check user
-if ($_SESSION['user'] != 'admin') {
+if ($_SESSION['userContext'] != 'admin')  {
     header("Location: /list/user");
     exit;
 }
@@ -30,19 +30,17 @@ foreach($data as $key => $value) {
 $ipset_lists_json=json_encode($ipset_lists);
 
 // Check POST request
-if (!empty($_POST['ok'])) {
-
-    // Check token
+if (!empty($_POST['ok'])) {    // Check token
     if ((!isset($_POST['token'])) || ($_SESSION['token'] != $_POST['token'])) {
         header('location: /login/');
         exit();
     }
 
     // Check empty fields
-    if (empty($_POST['v_action'])) $errors[] = __('action');
-    if (empty($_POST['v_protocol'])) $errors[] = __('protocol');
-    if (!isset($_POST['v_port'])) $errors[] = __('port');
-    if (empty($_POST['v_ip'])) $errors[] = __('ip address');
+    if (empty($_POST['v_action'])) $errors[] = _('action');
+    if (empty($_POST['v_protocol'])) $errors[] = _('protocol');
+    if (empty($_POST['v_port']) && strlen($_POST['v_port']) == 0) $errors[] = _('port');
+    if (empty($_POST['v_ip'])) $errors[] = _('ip address');
     if (!empty($errors[0])) {
         foreach ($errors as $i => $error) {
             if ( $i == 0 ) {
@@ -51,7 +49,7 @@ if (!empty($_POST['ok'])) {
                 $error_msg = $error_msg.", ".$error;
             }
         }
-        $_SESSION['error_msg'] = __('Field "%s" can not be blank.',$error_msg);
+        $_SESSION['error_msg'] = sprintf(_('Field "%s" can not be blank.'),$error_msg);
     }
 
     // Protect input
@@ -73,7 +71,7 @@ if (!empty($_POST['ok'])) {
 
     // Flush field values on success
     if (empty($_SESSION['error_msg'])) {
-        $_SESSION['ok_msg'] = __('RULE_CREATED_OK');
+        $_SESSION['ok_msg'] = _('RULE_CREATED_OK');
         unset($v_port);
         unset($v_ip);
         unset($v_comment);

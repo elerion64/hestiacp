@@ -7,7 +7,7 @@ $TAB = 'USER';
 include($_SERVER['DOCUMENT_ROOT']."/inc/main.php");
 
 // Check user
-if ($_SESSION['user'] != 'admin') {
+if ($_SESSION['userContext'] != 'admin')  {
     header("Location: /list/user");
     exit;
 }
@@ -22,13 +22,12 @@ if (!empty($_POST['ok'])) {
     }
 
     // Check empty fields
-    if (empty($_POST['v_username'])) $errors[] = __('user');
-    if (empty($_POST['v_password'])) $errors[] = __('password');
-    if (empty($_POST['v_package'])) $errrors[] = __('package');
-    if (empty($_POST['v_email'])) $errors[] = __('email');
-    if (empty($_POST['v_fname'])) $errors[] = __('first name');
-    if (empty($_POST['v_lname'])) $errors[] = __('last name');
-    if (!empty($errors[0])) {
+    if (empty($_POST['v_username'])) $errors[] = _('user');
+    if (empty($_POST['v_password'])) $errors[] = _('password');
+    if (empty($_POST['v_package'])) $errrors[] = _('package');
+    if (empty($_POST['v_email'])) $errors[] = _('email');
+    if (empty($_POST['v_name'])) $errors[] = _('name');
+    if (!empty($errors)) {
         foreach ($errors as $i => $error) {
             if ( $i == 0 ) {
                 $error_msg = $error;
@@ -36,18 +35,17 @@ if (!empty($_POST['ok'])) {
                 $error_msg = $error_msg.", ".$error;
             }
         }
-        $_SESSION['error_msg'] = __('Field "%s" can not be blank.',$error_msg);
+        $_SESSION['error_msg'] = sprintf(_('Field "%s" can not be blank.'),$error_msg);
     }
 
     // Validate email
     if ((empty($_SESSION['error_msg'])) && (!filter_var($_POST['v_email'], FILTER_VALIDATE_EMAIL))) {
-        $_SESSION['error_msg'] = __('Please enter valid email address.');
+        $_SESSION['error_msg'] = _('Please enter valid email address.');
     }
 
     // Check password length
     if (empty($_SESSION['error_msg'])) {
-        $pw_len = strlen($_POST['v_password']);
-        if ($pw_len < 6 ) $_SESSION['error_msg'] = __('Password is too short.',$error_msg);
+        if (!validate_password($_POST['v_password'])) { $_SESSION['error_msg'] = _('Password does not match the minimum requirements'); }
     }
 
     // Protect input
@@ -55,8 +53,7 @@ if (!empty($_POST['ok'])) {
     $v_email = escapeshellarg($_POST['v_email']);
     $v_package = escapeshellarg($_POST['v_package']);
     $v_language = escapeshellarg($_POST['v_language']);
-    $v_fname = escapeshellarg($_POST['v_fname']);
-    $v_lname = escapeshellarg($_POST['v_lname']);
+    $v_name = escapeshellarg($_POST['v_name']);
     $v_notify = $_POST['v_notify'];
 
 
@@ -66,7 +63,7 @@ if (!empty($_POST['ok'])) {
         $fp = fopen($v_password, "w");
         fwrite($fp, $_POST['v_password']."\n");
         fclose($fp);
-        exec (HESTIA_CMD."v-add-user ".$v_username." ".$v_password." ".$v_email." ".$v_package." ".$v_fname." ".$v_lname, $output, $return_var);
+        exec (HESTIA_CMD."v-add-user ".$v_username." ".$v_password." ".$v_email." ".$v_package." ".$v_name, $output, $return_var);
         check_return_code($return_var,$output);
         unset($output);
         unlink($v_password);
@@ -80,31 +77,54 @@ if (!empty($_POST['ok'])) {
         unset($output);
     }
 
+    // Set Role
+    if (empty($_SESSION['error_msg'])) {
+        $v_role = escapeshellarg($_POST['v_role']);
+        exec (HESTIA_CMD."v-change-user-role ".$v_username." ".$v_role, $output, $return_var);
+        check_return_code($return_var,$output);
+        unset($output);
+    }
+
+    // Set login restriction
+    if (empty($_SESSION['error_msg'])) {
+        if ($_POST['v_login_disabled']) {
+            if ($_POST['v_login_disabled'] == 'on') { $_POST['v_login_disabled'] = 'yes'; } else { $_POST['v_login_disabled'] = 'no'; }
+            exec (HESTIA_CMD."v-change-user-config-value ".$v_username." LOGIN_DISABLED ".escapeshellarg($_POST['v_login_disabled']), $output, $return_var);
+            check_return_code($return_var,$output);
+            unset($output);
+        }
+    }
+
     // Send email to the new user
     if ((empty($_SESSION['error_msg'])) && (!empty($v_notify))) {
         $to = $_POST['v_notify'];
-        $subject = _translate($_POST['v_language'],"Welcome to Hestia Control Panel");
+        // send email in "users" language 
+        putenv("LANGUAGE=".$_POST['v_language']);
+        
+        $subject = _("Welcome to Hestia Control Panel");
         $hostname = exec('hostname');
         unset($output);
-        $from = _translate($_POST['v_language'],'MAIL_FROM',$hostname);
-        if (!empty($_POST['v_fname'])) {
-            $mailtext = _translate($_POST['v_language'],'GREETINGS_GORDON_FREEMAN',$_POST['v_fname'],$_POST['v_lname']);
+        $from = sprintf(_('MAIL_FROM'),$hostname);
+
+        if (!empty($_POST['v_name'])) {
+            $mailtext = sprintf(_('GREETINGS_GORDON'),$_POST['v_name'])."\r\n";
         } else {
-            $mailtext = _translate($_POST['v_language'],'GREETINGS');
+            $mailtext = _('GREETINGS')."\r\n";
         }
-        $mailtext .= _translate($_POST['v_language'],'ACCOUNT_READY',$_SERVER['HTTP_HOST'],$_POST['v_username'],$_POST['v_password']);
+        
+        $mailtext .= sprintf(_('ACCOUNT_READY'),$_SERVER['HTTP_HOST'],$_POST['v_username'],$_POST['v_password']);
         send_email($to, $subject, $mailtext, $from);
+        putenv("LANGUAGE=".detect_user_language());
     }
 
     // Flush field values on success
     if (empty($_SESSION['error_msg'])) {
-        $_SESSION['ok_msg'] = __('USER_CREATED_OK',htmlentities($_POST['v_username']),htmlentities($_POST['v_username']));
-        $_SESSION['ok_msg'] .= " / <a href=/login/?loginas=".htmlentities($_POST['v_username']).">" . __('login as') ." ".htmlentities($_POST['v_username']). "</a>";
+        $_SESSION['ok_msg'] = sprintf(_('USER_CREATED_OK'),htmlentities($_POST['v_username']),htmlentities($_POST['v_username']));
+        $_SESSION['ok_msg'] .= " / <a href=/login/?loginas=".htmlentities($_POST['v_username'])."&token=".htmlentities($_SESSION['token']).">" . _('login as') ." ".htmlentities($_POST['v_username']). "</a>";
         unset($v_username);
         unset($v_password);
         unset($v_email);
-        unset($v_fname);
-        unset($v_lname);
+        unset($v_name);
         unset($v_notify);
     }
 }
@@ -118,8 +138,11 @@ unset($output);
 
 // List languages
 exec (HESTIA_CMD."v-list-sys-languages json", $output, $return_var);
-$languages = json_decode(implode('', $output), true);
-unset($output);
+$language = json_decode(implode('', $output), true);
+foreach($language as $lang){
+    $languages[$lang] = translate_json($lang);
+}
+asort($languages);
 
 // Render page
 render_page($user, $TAB, 'add_user');

@@ -1,3 +1,8 @@
+#=======================================================================#
+# Default Web Domain Template                                           #
+# DO NOT MODIFY THIS FILE! CHANGES WILL BE LOST WHEN REBUILDING DOMAINS #
+#=======================================================================#
+
 server {
     listen      %ip%:%proxy_port%;
     server_name %domain_idn% %alias_idn%;
@@ -6,7 +11,7 @@ server {
 
     location / {
         proxy_pass      http://%ip%:%web_port%;
-        location ~* ^.+\.(%proxy_extentions%)$ {
+        location ~* ^.+\.(%proxy_extensions%)$ {
             root           %docroot%;
             access_log     /var/log/%web_system%/domains/%domain%.log combined;
             access_log     /var/log/%web_system%/domains/%domain%.bytes bytes;

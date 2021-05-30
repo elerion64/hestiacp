@@ -1,11 +1,47 @@
+App.Actions.WEB.update_custom_doc_root = function(elm, hint) {
+    var prepath = $('input[name="v-custom-doc-root_prepath"]').val();
+    var domain = $('select[name="v-custom-doc-domain"]').val();
+    var folder = $('input[name="v-custom-doc-folder"]').val();
+
+    $('.custom_docroot_hint').html(prepath+domain+'/public_html/'+folder);
+}
+App.Listeners.DB.keypress_custom_folder = function() {
+    var ref = $('input[name="v-custom-doc-folder"]');
+    var current_rec = ref.val();
+    App.Actions.WEB.update_custom_doc_root(ref, current_rec);
+
+
+    ref.bind('keypress input', function(evt) {
+        clearTimeout(window.frp_usr_tmt);
+        window.frp_usr_tmt = setTimeout(function() {
+            var elm = $(evt.target);
+            App.Actions.WEB.update_custom_doc_root(elm, $(elm).val());
+        });
+    });
+}
+
+App.Listeners.DB.change_custom_doc = function() {
+    var ref = $('select[name="v-custom-doc-domain"]');
+    var current_rec = ref.val();
+    ref.bind('change select', function(evt) {
+        clearTimeout(window.frp_usr_tmt);
+        window.frp_usr_tmt = setTimeout(function() {
+            var elm = $(evt.target);
+            App.Actions.WEB.update_custom_doc_root(elm, $(elm).val());
+        });
+    });
+}
+
+// Page entry point
+// Trigger listeners
+App.Listeners.DB.keypress_custom_folder();
+App.Listeners.DB.change_custom_doc();
+
 App.Actions.WEB.update_ftp_username_hint = function(elm, hint) {
     if (hint.trim() == '') {
         $(elm).parent().find('.hint').html('');
     }
 
-    if (hint.indexOf(GLOBAL.FTP_USER_PREFIX) == 0) {
-        hint = hint.slice(GLOBAL.FTP_USER_PREFIX.length, hint.length);
-    }
     hint = hint.replace(/[^\w\d]/gi, '');
 
     $(elm).parent().find('.v-ftp-user').val(hint);
@@ -132,6 +168,14 @@ App.Actions.WEB.toggle_additional_ftp_accounts = function(elm) {
     }
 }
 
+App.Actions.WEB.toggle_ssl = function (elm){
+    elementHideShow('ssltable');
+    if($('#ssl_crt').val().length > 0 || $('#ssl_hsts').prop('checked') || $('#letsencrypt').prop('checked')){
+        return false;
+    }
+    $('#v_ssl_forcessl').prop('checked', true);
+}
+
 App.Actions.WEB.toggle_letsencrypt = function(elm) {
     if ($(elm).attr('checked')) {
         $('#ssltable textarea[name=v_ssl_crt],#ssltable textarea[name=v_ssl_key], #ssltable textarea[name=v_ssl_ca]').attr('disabled', 'disabled');
@@ -191,6 +235,28 @@ $(function() {
             $('.stats-auth').show();
         }
     });
+    
+    $('select[name="v_nginx_cache"]').change(function(evt){
+        var select = $(evt.target);
+    
+        if(select.val() != 'yes'){
+            $('#v-clear-cache').hide();
+            $('#v_nginx_cache_length').hide();
+        } else {
+            $('#v-clear-cache').show();
+            $('#v_nginx_cache_length').show();
+        }
+    });  
+    
+    $('select[name="v_proxy_template"]').change(function(evt){
+        var select = $(evt.target);
+
+        if(select.val() != 'caching'){
+            $('#v-clear-cache').hide();
+        } else {
+            $('#v-clear-cache').show();
+        }
+    });  
 
     $('#vstobjects').on('submit', function(evt) {
         $('input[disabled]').each(function(i, elm) {
@@ -230,3 +296,12 @@ function elementHideShow(elementToHideOrShow){
     var el = document.getElementById(elementToHideOrShow);
     el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
+
+$('.v-redirect-custom-value').change( function(){
+    
+    if(this.value == "custom"){
+        $('#custom_redirect').show();
+    }else{
+        $('#custom_redirect').hide();
+    }
+})

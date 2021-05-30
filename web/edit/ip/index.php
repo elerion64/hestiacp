@@ -7,7 +7,7 @@ $TAB = 'IP';
 include($_SERVER['DOCUMENT_ROOT']."/inc/main.php");
 
 // Check user
-if ($_SESSION['user'] != 'admin') {
+if ($_SESSION['userContext'] != 'admin')  {
     header("Location: /list/user");
     exit;
 }
@@ -32,6 +32,7 @@ $v_netmask = $data[$v_ip]['NETMASK'];
 $v_interace = $data[$v_ip]['INTERFACE'];
 $v_name = $data[$v_ip]['NAME'];
 $v_nat = $data[$v_ip]['NAT'];
+$v_helo = $data[$v_ip]['HELO'];
 $v_ipstatus = $data[$v_ip]['STATUS'];
 if ($v_ipstatus == 'dedicated') $v_dedicated = 'yes';
 $v_owner = $data[$v_ip]['OWNER'];
@@ -99,9 +100,17 @@ if (!empty($_POST['save'])) {
         unset($output);
     }
 
+    // Change HELO/SMTP Banner address
+    if (($v_helo != $_POST['v_helo']) && (empty($_SESSION['error_msg']))) {
+        $v_helo = escapeshellarg($_POST['v_helo']);
+        exec (HESTIA_CMD."v-change-sys-ip-helo ".$v_ip." ".$v_helo, $output, $return_var);
+        check_return_code($return_var,$output);
+        unset($output);
+    }
+
     // Set success message
     if (empty($_SESSION['error_msg'])) {
-        $_SESSION['ok_msg'] = __('Changes has been saved.');
+        $_SESSION['ok_msg'] = _('Changes has been saved.');
     }
 }
 

@@ -120,8 +120,8 @@ $(document).ready(function(){
               VE.tmp.sort_direction = $(this).hasClass('up')*1 || -1; 
 
               $('.l-sort .sort-by span b').html($(this).parent('li').find('.name').html());
-              $('.l-sort .sort-by i').removeClass('fa-sort-amount-up fa-sort-amount-down');
-              $(this).hasClass('up') ? $('.l-sort .sort-by i').addClass('fa-sort-amount-up') : $('.l-sort .sort-by i').addClass('fa-sort-amount-down');
+              $('.l-sort .sort-by i').removeClass('fa-sort-alpha-up fa-sort-alpha-down');
+              $(this).hasClass('up') ? $('.l-sort .sort-by i').addClass('fa-sort-alpha-up') : $('.l-sort .sort-by i').addClass('fa-sort-alpha-down');
               $('.units .l-unit').sort(function (a, b) {
                 if(VE.tmp.sort_as_int)
                   return parseInt($(a).attr(VE.tmp.sort_par)) >= parseInt($(b).attr(VE.tmp.sort_par)) ? VE.tmp.sort_direction : VE.tmp.sort_direction * -1;
@@ -129,39 +129,23 @@ $(document).ready(function(){
                   return $(a).attr(VE.tmp.sort_par) <= $(b).attr(VE.tmp.sort_par) ? VE.tmp.sort_direction : VE.tmp.sort_direction * -1;
                 }).appendTo(".l-center.units");
               });
-
-
-
-            // STARS
-
-              $('.l-unit .l-icon-star').click(function(){
-                var l_unit = $(this).parents('.l-unit');
-
-                if(l_unit.hasClass('l-unit--starred')){
-                  // removing star
-
-                  $.ajax({
-                    method: "POST",
-                    url: "/delete/favorite/index.php",
-                    data: { v_section: l_unit.attr('v_section'), v_unit_id: l_unit.attr('v_unit_id') }
-                  });
-
-                  l_unit.attr({'sort-star': 0});
-                  l_unit.removeClass('l-unit--starred');
-                }
-                else{
-                  $.ajax({
-                    method: "POST",
-                    url: "/add/favorite/index.php",
-                    data: { v_unit_id: l_unit.attr('v_unit_id'), v_section: l_unit.attr('v_section') }
-                  });
-
-                  l_unit.attr({'sort-star': 1});
-                  l_unit.addClass('l-unit--starred');
-                }
+              
+              $('#objects').submit( function (e){
+                 if(!e.originalEvent){
+                    return;
+                 }
+                 e.preventDefault();
+                 $('.ch-toggle').each( function (){
+                    if($(this).prop('checked')){
+                        key=this.name;
+                        div=$('<input type="hidden" name="'+key+'" value="'+this.value+'"/>');
+                        $('#objects').append(div);
+                    }
+                 });
+                 
+                 $('#objects').submit();
+                 return false;
               });
-
-
 
               // Shortcuts
 

@@ -3,50 +3,52 @@
 session_start();
 
 define('HESTIA_CMD', '/usr/bin/sudo /usr/local/hestia/bin/');
-define('JS_LATEST_UPDATE', '1491697868');
+define('JS_LATEST_UPDATE', time());
 define('DEFAULT_PHP_VERSION', "php-" . exec('php -r "echo (float)phpversion();"'));
 
 $i = 0;
 
-require_once(dirname(__FILE__).'/i18n.php');
-
-
 // Saving user IPs to the session for preventing session hijacking
 $user_combined_ip = $_SERVER['REMOTE_ADDR'];
 
-if(isset($_SERVER['HTTP_CLIENT_IP'])){
+if (isset($_SERVER['HTTP_CLIENT_IP'])){
     $user_combined_ip .=  '|'. $_SERVER['HTTP_CLIENT_IP'];
 }
-if(isset($_SERVER['HTTP_X_FORWARDED_FOR'])){
+if (isset($_SERVER['HTTP_X_FORWARDED_FOR'])){
     $user_combined_ip .=  '|'. $_SERVER['HTTP_X_FORWARDED_FOR'];
 }
-if(isset($_SERVER['HTTP_FORWARDED_FOR'])){
+if (isset($_SERVER['HTTP_FORWARDED_FOR'])){
     $user_combined_ip .=  '|'. $_SERVER['HTTP_FORWARDED_FOR'];
 }
-if(isset($_SERVER['HTTP_X_FORWARDED'])){
+if (isset($_SERVER['HTTP_X_FORWARDED'])){
     $user_combined_ip .=  '|'. $_SERVER['HTTP_X_FORWARDED'];
 }
-if(isset($_SERVER['HTTP_FORWARDED'])){
+if (isset($_SERVER['HTTP_FORWARDED'])){
     $user_combined_ip .=  '|'. $_SERVER['HTTP_FORWARDED'];
 }
-if(isset($_SERVER['HTTP_CF_CONNECTING_IP'])){
+if (isset($_SERVER['HTTP_CF_CONNECTING_IP'])){
     if(!empty($_SERVER['HTTP_CF_CONNECTING_IP'])){
       $user_combined_ip = $_SERVER['HTTP_CF_CONNECTING_IP'];
     }
 }
 
-if(!isset($_SESSION['user_combined_ip'])){
+if (!isset($_SESSION['user_combined_ip'])){
     $_SESSION['user_combined_ip'] = $user_combined_ip;
 }
 
 // Checking user to use session from the same IP he has been logged in
-if($_SESSION['user_combined_ip'] != $user_combined_ip && $_SERVER['REMOTE_ADDR'] != '127.0.0.1'){
+if ($_SESSION['user_combined_ip'] != $user_combined_ip && $_SERVER['REMOTE_ADDR'] != '127.0.0.1'){
+    $v_user = escapeshellarg($_SESSION['user']);
+    $v_session_id = escapeshellarg($_SESSION['token']);
+    exec(HESTIA_CMD."v-log-user-logout ".$v_user." ".$v_session_id, $output, $return_var);
     session_destroy();
     session_start();
     $_SESSION['request_uri'] = $_SERVER['REQUEST_URI'];
     header("Location: /login/");
     exit;
 }
+// Load Hestia Config directly
+    load_hestia_config();
 
 // Check system settings
 if ((!isset($_SESSION['VERSION'])) && (!defined('NO_AUTH_REQUIRED'))) {
@@ -72,57 +74,30 @@ if (isset($_SESSION['user'])) {
     }
 }
 
-if (isset($_SESSION['language'])) {
-    switch ($_SESSION['language']) {
-        case 'ro':
-            setlocale(LC_ALL, 'ro_RO.utf8');
-            break;
-        case 'ru':
-            setlocale(LC_ALL, 'ru_RU.utf8');
-            break;
-        case 'ua':
-            setlocale(LC_ALL, 'uk_UA.utf8');
-            break;
-        case 'es':
-            setlocale(LC_ALL, 'es_ES.utf8');
-            break;
-        case 'ja':
-            setlocale(LC_ALL, 'ja_JP.utf8');
-            break;
-        default:
-            setlocale(LC_ALL, 'en_US.utf8');
+if (!defined('NO_AUTH_REQUIRED')){
+    if (empty($_SESSION['LAST_ACTIVITY']) || empty($_SESSION['INACTIVE_SESSION_TIMEOUT'])){
+        session_destroy();
+        header("Location: /login/");
+    } else if ($_SESSION['INACTIVE_SESSION_TIMEOUT'] * 60 + $_SESSION['LAST_ACTIVITY'] < time()) {
+        $v_user = escapeshellarg($_SESSION['user']);
+        $v_session_id = escapeshellarg($_SESSION['token']);
+        exec(HESTIA_CMD."v-log-user-logout ".$v_user." ".$v_session_id, $output, $return_var);
+        session_destroy();
+        header("Location: /login/");
+    } else {
+        $_SESSION['LAST_ACTIVITY'] = time();
     }
 }
 
 if (isset($_SESSION['user'])) {
     $user = $_SESSION['user'];
-    load_hestia_config();
 }
 
-if (isset($_SESSION['look']) && ( $_SESSION['look'] != 'admin' )) {
+if (isset($_SESSION['look']) && ($_SESSION['userContext'] === 'admin')) {
     $user = $_SESSION['look'];
 }
 
-function get_favourites(){
-    exec (HESTIA_CMD."v-list-user-favourites ".$_SESSION['user']." json", $output, $return_var);
-//    $data = json_decode(implode('', $output).'}', true);
-    $data = json_decode(implode('', $output), true);
-    $data = array_reverse($data,true);
-    $favourites = array();
-
-    foreach($data['Favourites'] as $key => $favourite){
-        $favourites[$key] = array();
-
-        $items = explode(',', $favourite);
-        foreach($items as $item){
-            if($item)
-                $favourites[$key][trim($item)] = 1;
-        }
-    }
-
-    $_SESSION['favourites'] = $favourites;
-}
-
+require_once(dirname(__FILE__).'/i18n.php');
 
 function check_error($return_var) {
     if ( $return_var > 0 ) {
@@ -134,7 +109,7 @@ function check_error($return_var) {
 function check_return_code($return_var,$output) {
     if ($return_var != 0) {
         $error = implode('<br>', $output);
-        if (empty($error)) $error = __('Error code:',$return_var);
+        if (empty($error)) $error = sprintf(_('Error code:'),$return_var);
         $_SESSION['error_msg'] = $error;
     }
 }
@@ -153,17 +128,14 @@ function render_page($user, $TAB, $page) {
     // I think those variables should be passed via arguments
     extract($GLOBALS, EXTR_SKIP);
 
+    // Policies controller
+    @include_once(dirname(__DIR__) . '/inc/policies.php');
+
     // Body
-    if (($_SESSION['user'] !== 'admin') && (@include($__template_dir . "user/$page.html"))) {
-        // User page loaded
-    } else {
-        // Not admin or user page doesn't exist
-        // Load admin page
-        @include($__template_dir . "admin/$page.html");
-    }
+    include($__template_dir . "pages/$page.html");
 
     // Including common js files
-    @include_once(dirname(__DIR__) . '/templates/scripts.html');
+    @include_once(dirname(__DIR__) . '/templates/includes/end_js.html');
     // Including page specific js file
     if(file_exists($__pages_js_dir.$page.'.js'))
        echo '<script type="text/javascript" src="/js/pages/'.$page.'.js?'.JS_LATEST_UPDATE.'"></script>';
@@ -177,22 +149,70 @@ function top_panel($user, $TAB) {
     $command = HESTIA_CMD."v-list-user ".escapeshellarg($user)." 'json'";
     exec ($command, $output, $return_var);
     if ( $return_var > 0 ) {
-        header("Location: /error/");
+        echo "<span style='font-size: 18px;'><b>ERROR: Unable to retrieve account details.</b><br>Please <b><a href='/login/'>log in</a></b> again.</span>";
+        session_destroy();
+        header("Location: /login/");
         exit;
     }
     $panel = json_decode(implode('', $output), true);
     unset($output);
 
-    if ( $user == 'admin' ) {
-        include(dirname(__FILE__).'/../templates/admin/panel.html');
-    } else {
-        include(dirname(__FILE__).'/../templates/user/panel.html');
+    // Log out active sessions for suspended users
+    if (($panel[$user]['SUSPENDED'] === 'yes') && ($_SESSION['POLICY_USER_VIEW_SUSPENDED'] !== 'yes')) {
+        $_SESSION['error_msg'] = "You have been logged out. Please log in again.";
+        session_destroy();
+        header("Location: /login/");
     }
+
+    // Reset user permissions if changed while logged in
+    if (($panel[$user]['ROLE']) !== ($_SESSION['userContext']) && (!isset($_SESSION['look']))) {
+        unset($_SESSION['userContext']);
+        $_SESSION['userContext'] = $panel[$user]['ROLE'];
+    }
+
+    // Load user's selected theme and do not change it when impersonting user
+    if ( (isset($panel[$user]['THEME'])) && (!isset($_SESSION['look']) )) {
+        $_SESSION['userTheme'] = $panel[$user]['THEME'];
+    }
+    
+    // Unset userTheme override variable if POLICY_USER_CHANGE_THEME is set to no
+    if ($_SESSION['POLICY_USER_CHANGE_THEME'] === 'no') {
+        unset($_SESSION['userTheme']);
+    }
+
+    // Set preferred sort order
+    if (!isset($_SESSION['look'])) {
+        $_SESSION['userSortOrder'] = $panel[$user]['PREF_UI_SORT'];
+    }
+    
+    // Set home location URLs
+    if (($_SESSION['userContext'] === 'admin') && (!isset($_SESSION['look']))) {
+        // Display users list for administrators unless they are impersonating a user account
+        $home_url = "/list/user/";
+    } else {
+        // Set home location URL based on available package features from account
+        if($panel[$user]['WEB_DOMAINS'] != "0") {
+            $home_url = "/list/web/";
+        } else if ($panel[$user]['DNS_DOMAINS'] != "0") {
+            $home_url = "/list/dns/";
+        } else if ($panel[$user]['MAIL_DOMAINS'] != "0") {
+            $home_url = "/list/mail/";
+        } else if ($panel[$user]['DATABASES'] != "0") {
+            $home_url = "/list/db/";
+        } else if ($panel[$user]['CRON_JOBS'] != "0") {
+            $home_url = "/list/cron/";
+        } else if ($panel[$user]['BACKUPS'] != "0") {
+            $home_url = "/list/backups/";
+        }
+    }
+
+    include(dirname(__FILE__).'/../templates/includes/panel.html');
+
 }
 
 function translate_date($date){
   $date = strtotime($date);
-  return strftime("%d &nbsp;", $date).__(strftime("%b", $date)).strftime(" &nbsp;%Y", $date);
+  return strftime("%d &nbsp;", $date)._(strftime("%b", $date)).strftime(" &nbsp;%Y", $date);
 }
 
 function humanize_time($usage) {
@@ -203,23 +223,23 @@ function humanize_time($usage) {
 
             $usage = number_format($usage);
             if ( $usage == 1 ) {
-                $usage = $usage." ".__('day');
+                $usage = $usage." "._('day');
             } else {
-                $usage = $usage." ".__('days');
+                $usage = $usage." "._('days');
             }
         } else {
             $usage = number_format($usage);
             if ( $usage == 1 ) {
-                $usage = $usage." ".__('hour');
+                $usage = $usage." "._('hour');
             } else {
-                $usage = $usage." ".__('hours');
+                $usage = $usage." "._('hours');
             }
         }
     } else {
         if ( $usage == 1 ) {
-            $usage = $usage." ".__('minute');
+            $usage = $usage." "._('minute');
         } else {
-            $usage = $usage." ".__('minutes');
+            $usage = $usage." "._('minutes');
         }
     }
     return $usage;
@@ -263,7 +283,7 @@ function humanize_usage_measure($usage) {
         $measure = 'mb';
     }
 
-    return __($measure);
+    return _($measure);
 }
 
 
@@ -404,4 +424,12 @@ function backendtpl_with_webdomains() {
         }
     }
     return $backend_list;
+}
+/**
+ * Check if password is valid
+ *
+ * @return int; 1 / 0
+ */
+function validate_password($password){
+    return preg_match('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(.){8,}$/', $password);
 }

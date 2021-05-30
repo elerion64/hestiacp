@@ -7,7 +7,7 @@ $TAB = 'BACKUP';
 include($_SERVER['DOCUMENT_ROOT']."/inc/main.php");
 
 // Edit as someone else?
-if (($_SESSION['user'] == 'admin') && (!empty($_GET['user']))) {
+if (($_SESSION['userContext'] === 'admin') && (!empty($_GET['user']))) {
     $user=escapeshellarg($_GET['user']);
 }
 
@@ -117,7 +117,7 @@ if (!empty($_POST['save'])) {
 
     // Set success message
     if (empty($_SESSION['error_msg'])) {
-        $_SESSION['ok_msg'] = __("Changes has been saved.");
+        $_SESSION['ok_msg'] = _("Changes has been saved.");
     }
 }
 

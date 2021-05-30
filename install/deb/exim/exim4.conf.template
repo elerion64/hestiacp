@@ -9,6 +9,7 @@
 #CLAMD = yes
 
 smtp_banner = $smtp_active_hostname
+smtp_active_hostname = ${if exists {/etc/exim4/mailhelo.conf}{${lookup{$interface_address}lsearch{/etc/exim4/mailhelo.conf}{$value}{$primary_hostname}}}{$primary_hostname}}
 add_environment = <; PATH=/bin:/usr/bin
 keep_environment =
 disable_ipv6 = true
@@ -74,6 +75,11 @@ DKIM_PRIVATE_KEY = ${if exists{DKIM_FILE}{DKIM_FILE}{0}}
 
 OUTGOING_IP = /etc/exim4/domains/$sender_address_domain/ip
 
+SMTP_RELAY_FILE = ${if exists{/etc/exim4/domains/${sender_address_domain}/smtp_relay.conf}{/etc/exim4/domains/$sender_address_domain/smtp_relay.conf}{/etc/exim4/smtp_relay.conf}}
+SMTP_RELAY_HOST = ${lookup{host}lsearch{SMTP_RELAY_FILE}}
+SMTP_RELAY_PORT = ${lookup{port}lsearch{SMTP_RELAY_FILE}}
+SMTP_RELAY_USER = ${lookup{user}lsearch{SMTP_RELAY_FILE}}
+SMTP_RELAY_PASS = ${lookup{pass}lsearch{SMTP_RELAY_FILE}}
 
 ######################################################################
 #                       ACL CONFIGURATION                            #
@@ -207,7 +213,7 @@ acl_check_data:
 
 acl_check_mime:
   deny   message        = Blacklisted file extension detected
-         condition      = ${if match {${lc:$mime_filename}}{\N(\.ade|\.adp|\.bat|\.chm|\.cmd|\.com|\.cpl|\.exe|\.hta|\.ins|\.isp|\.jse|\.lib|\.lnk|\.mde|\.msc|\.msp|\.mst|\.pif|\.scr|\.sct|\.shb|\.sys|\.vb|\.vbe|\.vbs|\.vxd|\.wsc|\.wsf|\.wsh)$\N}{1}{0}}
+         condition      = ${if match {${lc:$mime_filename}}{\N(\.ace|\.ade|\.adp|\.app|\.arj|\.asp|\.aspx|\.asx|\.bas|\.bat|\.cab|\.cer|\.chm|\.cmd|\.cnt|\.com|\.cpl|\.crt|\.csh|\.der|\.diagcab|\.dll|\.efi|\.exe|\.fla|\.fon|\.fxp|\.gadget|\.grp|\.hlp|\.hpj|\.hta|\.htc|\.img|\.inf|\.ins|\.iso|\.isp|\.its|\.jar|\.jnlp|\.js|\.jse|\.ksh|\.lib|\.lnk|\.mad|\.maf|\.mag|\.mam|\.maq|\.mar|\.mas|\.mat|\.mau|\.mav|\.maw|\.mcf|\.mda|\.mdb|\.mde|\.mdt|\.mdw|\.mdz|\.msc|\.msh|\.msh1|\.msh1xml|\.msh2|\.msh2xml|\.mshxml|\.msi|\.msp|\.mst|\.msu|\.ops|\.osd|\.pcd|\.pif|\.pl|\.plg|\.prf|\.prg|\.printerexport|\.ps1|\.ps1xml|\.ps2|\.ps2xml|\.psc1|\.psc2|\.psd1|\.psdm1|\.pst|\.py|\.pyc|\.pyo|\.pyw|\.pyz|\.pyzw|\.reg|\.scf|\.scr|\.sct|\.sfx|\.shb|\.shs|\.swf|\.sys|\.theme|\.tmp|\.ttf|\.url|\.vb|\.vba|\.vbe|\.vbp|\.vbs|\.vhd|\.vhdx|\.vsmacros|\.vsw|\.vxd|\.webpnp|\.website|\.wim|\.ws|\.wsc|\.wsf|\.wsh|\.xbap|\.xll|\.xnk)$\N}{1}{0}}
 
   accept
 
@@ -217,6 +223,11 @@ acl_check_mime:
 #                   AUTHENTICATION CONFIGURATION                     #
 ######################################################################
 begin authenticators
+
+smtp_relay_login:
+  driver = plaintext
+  public_name = LOGIN
+  hide client_send = : SMTP_RELAY_USER : SMTP_RELAY_PASS
 
 dovecot_plain:
   driver = dovecot
@@ -238,13 +249,15 @@ dovecot_login:
 ######################################################################
 begin routers
 
-#smarthost:
-#  driver = manualroute
-#  domains = ! +local_domains
-#  transport = remote_smtp
-#  route_list = * smartrelay.hestiacp.com
-#  no_more
-#  no_verify
+send_via_smtp_relay:
+  driver = manualroute
+  address_data = SMTP_RELAY_HOST:SMTP_RELAY_PORT
+  domains = !+local_domains
+  require_files = SMTP_RELAY_FILE
+  transport = smtp_relay_smtp
+  route_list = * ${extract{1}{:}{$address_data}}::${extract{2}{:}{$address_data}}
+  no_more
+  no_verify
 
 dnslookup:
   driver = dnslookup
@@ -323,9 +336,14 @@ terminate_alias:
 ######################################################################
 begin transports
 
+smtp_relay_smtp:
+  driver = smtp
+  hosts_require_auth = $host_address
+  hosts_require_tls = $host_address
+
 remote_smtp:
   driver = smtp
-  helo_data = ${if exists {/etc/exim4/mailhelo.conf}{${lookup{$sender_address_domain}lsearch*{/etc/exim4/mailhelo.conf}{$value}{$primary_hostname}}}{$primary_hostname}}
+  helo_data = ${if exists {/etc/exim4/mailhelo.conf}{${lookup{$sending_ip_address}lsearch{/etc/exim4/mailhelo.conf}{$value}{$primary_hostname}}}{$primary_hostname}}
   dkim_domain = DKIM_DOMAIN
   dkim_selector = mail
   dkim_private_key = DKIM_PRIVATE_KEY

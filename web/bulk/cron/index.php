@@ -15,7 +15,7 @@ if ((!isset($_POST['token'])) || ($_SESSION['token'] != $_POST['token'])) {
 $job = $_POST['job'];
 $action = $_POST['action'];
 
-if ($_SESSION['user'] == 'admin') {
+if ($_SESSION['userContext'] === 'admin') {
     switch ($action) {
         case 'delete': $cmd='v-delete-cron-job';
             break;
@@ -25,14 +25,14 @@ if ($_SESSION['user'] == 'admin') {
             break;
         case 'delete-cron-reports': $cmd='v-delete-cron-reports';
             exec (HESTIA_CMD.$cmd." ".$user, $output, $return_var);
-            $_SESSION['error_msg'] = __('Cronjob email reporting has been successfully diabled');
+            $_SESSION['error_msg'] = _('Cronjob email reporting has been successfully disabled');
             unset($output);
             header("Location: /list/cron/");
             exit;
             break;
         case 'add-cron-reports': $cmd='v-add-cron-reports';
             exec (HESTIA_CMD.$cmd." ".$user, $output, $return_var);
-            $_SESSION['error_msg'] = __('Cronjob email reporting has been successfully enabled');
+            $_SESSION['error_msg'] = _('Cronjob email reporting has been successfully enabled');
             unset($output);
             header("Location: /list/cron/");
             exit;
@@ -45,14 +45,14 @@ if ($_SESSION['user'] == 'admin') {
             break;
         case 'delete-cron-reports': $cmd='v-delete-cron-reports';
             exec (HESTIA_CMD.$cmd." ".$user, $output, $return_var);
-            $_SESSION['error_msg'] = __('Cronjob email reporting has been successfully diabled');
+            $_SESSION['error_msg'] = _('Cronjob email reporting has been successfully disabled');
             unset($output);
             header("Location: /list/cron/");
             exit;
             break;
         case 'add-cron-reports': $cmd='v-add-cron-reports';
             exec (HESTIA_CMD.$cmd." ".$user, $output, $return_var);
-            $_SESSION['error_msg'] = __('Cronjob email reporting has been successfully enabled');
+            $_SESSION['error_msg'] = _('Cronjob email reporting has been successfully enabled');
             unset($output);
             header("Location: /list/cron/");
             exit;

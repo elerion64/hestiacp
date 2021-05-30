@@ -32,8 +32,13 @@ class HestiaAuth implements Service, AuthInterface
         if (isset($_SESSION['user'])) {
             $v_user = $_SESSION['user'];
         }
-        if (isset($_SESSION['look']) && $_SESSION['look'] != 'admin' && $v_user === 'admin') {
+        if (isset($_SESSION['look']) && ($_SESSION['userContext'] === 'admin')){
             $v_user = $_SESSION['look'];
+        }
+        if ( $_SESSION['look'] == 'admin' && $_SESSION['POLICY_SYSTEM_PROTECTED_ADMIN'] == 'yes' ){
+            // Go away do not login 
+            header('Location: /');
+            exit;
         }
         $this->hestia_user = $v_user;
         $this->permissions = isset($config['permissions']) ? (array)$config['permissions'] : [];
@@ -59,7 +64,7 @@ class HestiaAuth implements Service, AuthInterface
     {
         $user = new User();
         $user->setUsername($this->hestia_user);
-        $user->setName($this->hestia_user . " (" . $hstuser['FNAME'] . " " . $hstuser['LNAME'] . ")");
+        $user->setName($this->hestia_user . " (" . $hstuser['NAME']. ")");
         $user->setRole('user');
         $user->setPermissions($this->permissions);
         $user->setHomedir('/');

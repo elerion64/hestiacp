@@ -1,6 +1,9 @@
 #!/bin/bash
 # info: list users
 # options: [FORMAT]
+# labels: panel
+#
+# example: v-list-users
 #
 # The function to obtain the list of all system users.
 
@@ -8,6 +11,10 @@
 #----------------------------------------------------------#
 #                    Variable&Function                     #
 #----------------------------------------------------------#
+
+# Includes
+# shellcheck source=/usr/local/hestia/func/main.sh
+source $HESTIA/func/main.sh
 
 # Argument definition
 format=${1-shell}
@@ -26,8 +33,7 @@ json_list() {
         fi
         source $HESTIA/data/users/$USER/user.conf
         echo -n '    "'$USER'": {
-        "FNAME": "'$FNAME'",
-        "LNAME": "'$LNAME'",
+        "NAME": "'$NAME'",
         "PACKAGE": "'$PACKAGE'",
         "WEB_TEMPLATE": "'$WEB_TEMPLATE'",
         "BACKEND_TEMPLATE": "'$BACKEND_TEMPLATE'",
@@ -108,7 +114,7 @@ plain_list() {
             continue;
         fi
         source $HESTIA/data/users/$USER/user.conf
-        echo -ne "$USER\t$FNAME\t$LNAME\t$PACKAGE\t$WEB_TEMPLATE\t"
+        echo -ne "$USER\t$NAME\t$PACKAGE\t$WEB_TEMPLATE\t"
         echo -ne "$BACKEND_TEMPLATE\t$PROXY_TEMPLATE\t$DNS_TEMPLATE\t"
         echo -ne "$WEB_DOMAINS\t$WEB_ALIASES\t$DNS_DOMAINS\t$DNS_RECORDS\t"
         echo -ne "$MAIL_DOMAINS\t$MAIL_ACCOUNTS\t$DATABASES\t$CRON_JOBS\t"
@@ -127,7 +133,7 @@ plain_list() {
 
 # CSV list function
 csv_list() {
-    echo -n "USER,FNAME,LNAME,PACKAGE,WEB_TEMPLATE,BACKEND_TEMPLATE,"
+    echo -n "USER,NAME,PACKAGE,WEB_TEMPLATE,BACKEND_TEMPLATE,"
     echo -n "PROXY_TEMPLATE,DNS_TEMPLATE,WEB_DOMAINS,WEB_ALIASES,"
     echo -n "DNS_DOMAINS,DNS_RECORDS,MAIL_DOMAINS,MAIL_ACCOUNTS,"
     echo -n "DATABASES,CRON_JOBS,DISK_QUOTA,BANDWIDTH,NS,HOME,SHELL,"
@@ -144,7 +150,7 @@ csv_list() {
             continue;
         fi
         source $HESTIA/data/users/$USER/user.conf
-        echo -n "$USER,\"$FNAME\",\"$LNAME\",$PACKAGE,$WEB_TEMPLATE,"
+        echo -n "$USER,\"$NAME\",$PACKAGE,$WEB_TEMPLATE,"
         echo -n "$BACKEND_TEMPLATE,$PROXY_TEMPLATE,$DNS_TEMPLATE,"
         echo -n "$WEB_DOMAINS,$WEB_ALIASES,$DNS_DOMAINS,$DNS_RECORDS,"
         echo -n "$MAIL_DOMAINS,$MAIL_ACCOUNTS,$DATABASES,$CRON_JOBS,"

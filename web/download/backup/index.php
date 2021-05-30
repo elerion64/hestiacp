@@ -17,11 +17,11 @@ if(!file_exists('/backup/'.$backup)){
     $backup = escapeshellarg($_GET['backup']);
     exec (HESTIA_CMD."v-schedule-user-backup-download ".$v_username." ".$backup , $output, $return_var);
     if ($return_var == 0) {
-        $_SESSION['error_msg'] = __('BACKUP_DOWNLOAD_SCHEDULED');
+        $_SESSION['error_msg'] = _('BACKUP_DOWNLOAD_SCHEDULED');
     } else {
         $_SESSION['error_msg'] = implode('<br>', $output);
         if (empty($_SESSION['error_msg'])) {
-            $_SESSION['error_msg'] = __('Error: hestia did not return any output.');
+            $_SESSION['error_msg'] = _('Error: Hestia did not return any output.');
         }    
     }
     unset($output);
@@ -29,13 +29,13 @@ if(!file_exists('/backup/'.$backup)){
     exit;
 
 }else{
-    if ($_SESSION['user'] == 'admin') {
+    if ($_SESSION['userContext'] === 'admin') {
         header('Content-type: application/gzip');
         header("Content-Disposition: attachment; filename=\"".$backup."\";" ); 
         header("X-Accel-Redirect: /backup/" . $backup);
     }
 
-    if ((!empty($_SESSION['user'])) && ($_SESSION['user'] != 'admin')) {
+    if ((!empty($_SESSION['user'])) && ($_SESSION['userContext'] != 'admin') ) {
         if (strpos($backup, $user.'.') === 0) {
             header('Content-type: application/gzip');
             header("Content-Disposition: attachment; filename=\"".$backup."\";" ); 

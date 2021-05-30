@@ -11,7 +11,7 @@ if ((!isset($_GET['token'])) || ($_SESSION['token'] != $_GET['token'])) {
     exit();
 }
 
-if ($_SESSION['user'] == 'admin') {
+if ($_SESSION['userContext'] === 'admin') {
     if (!empty($_GET['srv'])) {
         if ($_GET['srv'] == 'iptables') {
             exec (HESTIA_CMD."v-update-firewall", $output, $return_var);
@@ -22,7 +22,7 @@ if ($_SESSION['user'] == 'admin') {
     }
     if ($return_var != 0) {
         $error = implode('<br>', $output);
-        if (empty($error)) $error =  __('SERVICE_ACTION_FAILED',__('start'),$v_service);;
+        if (empty($error)) $error =  _('Start "%s" failed',$v_service);;
             $_SESSION['error_srv'] = $error;
     }
     unset($output);
